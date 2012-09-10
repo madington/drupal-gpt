@@ -216,6 +216,11 @@ function _gpt_ads_is_outofpage($form_state, $settings = array()) {
 
 /**
  * Prepare targeting values for use in form builder.
+ *
+ * @param array $form_state
+ * @param array $settings
+ *
+ * @return void
  */
 function _gpt_ads_prep_targeting(&$form_state, $settings = array()) {
   // If targeting num is already set prep has already been completed.
