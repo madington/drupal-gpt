@@ -122,7 +122,7 @@ function gpt_ads_submit(&$form, &$form_state) {
   $settings =& $form_state['item']->settings['gpt_ads'];
 
   // Set settings for storage.
-  $settings['size'] = $form_state['values']['gpt_ads_size'];
+  $settings['size'] = gpt_prepare_size($form_state['values']['gpt_ads_size']);
   $settings['outofpage'] = $form_state['values']['gpt_ads_outofpage'];
 
   // Store targeting, iterate over elements.
@@ -311,25 +311,7 @@ function _gpt_ads_validate_size($element, &$form_state, $form) {
   if (!preg_match('#^[1-9][0-9]*x[1-9][0-9]*(?:,[1-9][0-9]*x[1-9][0-9]*)*$#', $element['#value'])) {
     _gpt_admin_attach_css();
     form_error($element, t('Ad slot creative size does not match the expected format.'));
-    return;
   }
-
-  // Explode out string into workable pairs.
-  $pairs = explode(',', $element['#value']);
-  foreach ($pairs as &$v) {
-    list($width, $height) = explode('x', $v);
-    // Can't use JSON_NUMERIC_CHECK flag on json_encode below, as it requires
-    // PHP 5.3.3, so we do it manually.
-    $v = array((int) $width, (int) $height);
-  }
-
-  // Reduce the multi-dimensional array to a single array, if appropriate.
-  if (count($pairs) == 1) {
-    $pairs = $pairs[0];
-  }
-
-  // Convert to format expected by GPT, JSON array(s).
-  $form_state['values']['gpt_ads_size'] = json_encode($pairs);
 }
 
 /**

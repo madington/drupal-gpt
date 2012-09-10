@@ -154,8 +154,37 @@ function gpt_page_build(&$page) {
   }
 }
 
-function gpt_prepare_size($sizes) {
-  // TODO: Set up prepare size to use this instead.
+/**
+ * Convert user friendly width x height size formatting to GPT JSON value.
+ *
+ * @param string $string
+ *   Width by height comma separated string in the format of: 320x300,320x600.
+ *
+ * @return string|void
+ *   Returns JSON encoded (multi-dimensional) array of width by height sizes in
+ *   the format GPT expects.
+ */
+function gpt_prepare_size($string = '') {
+  if (empty($string)) {
+    return;
+  }
+
+  // Explode out string into workable pairs.
+  $pairs = explode(',', $string);
+  foreach ($pairs as &$v) {
+    list($width, $height) = explode('x', $v);
+    // Can't use JSON_NUMERIC_CHECK flag on json_encode below, as it requires
+    // PHP 5.3.3, so we do it manually.
+    $v = array((int) $width, (int) $height);
+  }
+
+  // Reduce the multi-dimensional array to a single array, if appropriate.
+  if (count($pairs) == 1) {
+    $pairs = $pairs[0];
+  }
+
+  // Convert to format expected by GPT, JSON array(s).
+  return json_encode($pairs);
 }
 
 /**
