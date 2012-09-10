@@ -303,6 +303,7 @@ function _gpt_ads_validate_size($element, &$form_state, $form) {
   // Validate string.
   $element['#value'] = str_replace(' ', '', $element['#value']);
   if (!preg_match('#^[1-9][0-9]*x[1-9][0-9]*(?:,[1-9][0-9]*x[1-9][0-9]*)*$#', $element['#value'])) {
+    _gpt_admin_attach_css();
     form_error($element, t('Ad slot creative size does not match the expected format.'));
     return;
   }
