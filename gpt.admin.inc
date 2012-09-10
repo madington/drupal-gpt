@@ -358,10 +358,10 @@ function _gpt_validate_targeting($element, &$form_state, $form) {
     // Prepare form_set_error name for use in errors below.
     $name = implode('][', $element['#parents']) . '][';
     if (empty($key)) {
-      form_set_error($name . $key, t('Targeting key for value %value has been left empty.', array('%value' => $value)));
+      form_set_error($name . 'key', t('Targeting key for value %value has been left empty.', array('%value' => $value)));
     }
     else {
-      form_set_error($name . $value, t('Targeting value for key %key has been left empty.', array('%key' => $key)));
+      form_set_error($name . 'value', t('Targeting value for key %key has been left empty.', array('%key' => $key)));
     }
   }
 }
