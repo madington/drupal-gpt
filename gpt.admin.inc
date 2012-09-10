@@ -44,6 +44,8 @@ function gpt_ads_form(&$form, &$form_state) {
 
   // Targeting fields have the same keys, we have to set #tree to access them.
   $form['#tree'] = TRUE;
+  // Determine if the user is allowed to alter/create Javascript targeting.
+  $js_perm = user_access('gpt set javascript');
   // Build the fields with the proper number of targeting fields.
   for ($i = 0; $i < $form_state['gpt_ads_targeting_num']; $i++) {
     $default = isset($form_state['gpt_ads_targeting_defaults'][$i]) ? $form_state['gpt_ads_targeting_defaults'][$i] : FALSE;
@@ -64,10 +66,16 @@ function gpt_ads_form(&$form, &$form_state) {
       '#size' => 25,
       '#default_value' => $default ? $default['value'] : '',
     );
+    // Prevent users without the appropriate permission from setting Javascript.
+    if ($default['eval'] && !$js_perm) {
+      $form['gpt_ads_targeting_wrapper'][$i]['key']['#disabled'] = TRUE;
+      $form['gpt_ads_targeting_wrapper'][$i]['value']['#disabled'] = TRUE;
+    }
     $form['gpt_ads_targeting_wrapper'][$i]['eval'] = array(
       '#type' => 'checkbox',
       '#title' => t('Value is Javascript'),
       '#default_value' => $default ? $default['eval'] : '',
+      '#disabled' => !$js_perm,
     );
   }
 

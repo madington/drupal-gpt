@@ -155,6 +155,18 @@ function gpt_page_build(&$page) {
 }
 
 /**
+ * Implements hook_permission().
+ */
+function gpt_permission() {
+  return array(
+    'gpt set javascript' => array(
+      'title' => t('Set Javascript targeting'),
+      'description' => t('Allow users to create and edit Javascript targeting values. Potential to break Javascript on the site.'),
+    ),
+  );
+}
+
+/**
  * Convert user friendly width x height size formatting to GPT JSON value.
  *
  * @param string $string
