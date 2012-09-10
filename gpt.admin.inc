@@ -230,7 +230,8 @@ function _gpt_ads_prep_targeting(&$form_state, $settings = array()) {
 
   // Attempt to load stored settings.
   if (isset($settings['targeting'])) {
-    $i = 0;
+    // If loading stored settings reset targeting num and defaults.
+   $form_state['gpt_ads_targeting_num'] = $i = 0;
 
     // Iterate over stored values.
     foreach ($settings['targeting']['src'] as $key => $j) {
