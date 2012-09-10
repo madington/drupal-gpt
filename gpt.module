@@ -1,0 +1,264 @@
+<?php
+/**
+ * Implements hook_ad_manager_providers().
+ */
+function gpt_ad_manager_providers() {
+  return array(
+    'version' => 1,
+    'provides' => array(
+      // The key acts as the callback function for the configuration form, and
+      // as the theme output name.
+      // Do not wrap the value in t() as it is cached and will be wrapped with
+      // t() on output.
+      'gpt_ads' => 'Google Publisher Tag',
+    ),
+  );
+}
+
+/**
+ * Handle caching of ad registrations on the page until hook_page_alter().
+ *
+ * @param string|NULL $name
+ *   The machine name of the ad.
+ * @param array|NULL $settings
+ *   The stored settings of the ad.
+ * @param integer|NULL $index
+ *   The instance count of the ad on the page.
+ *
+ * @return array|NULL
+ *   Returns array of settings, or null if no settings have been registered.
+ */
+function gpt_ad_register($name = NULL, $settings = NULL, $index = NULL) {
+  $ads = &drupal_static(__FUNCTION__);
+
+  // If $name is set.
+  if (!is_null($name)) {
+    if (!is_array($settings)) {
+      $settings = array();
+    }
+    // Attach the container ID to the settings.
+    $settings['container'] = 'ad-manager-ad-' . $name . '-' . $index;
+    // Attach the settings to $ads.
+    $ads[$name . '-' . $index] = $settings;
+  }
+
+  return $ads;
+}
+
+/**
+ * Ad Manager ad provider form for Google Publisher Tag.
+ */
+function gpt_ads(&$form, &$form_state) {
+  // Load in logic that is needed for the provider form.
+  ctools_include('gpt.admin', 'gpt', FALSE);
+
+  // Call the form function, used to keep the .module light weight.
+  gpt_ads_form($form, $form_state);
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Alter settings form to provide needed configuration.
+ */
+function gpt_form_ad_manager_settings_form_alter(&$form, &$form_state) {
+  // Load in logic that is needed for the settings form.
+  ctools_include('gpt.admin', 'gpt', FALSE);
+
+  // Call the form function, used to keep the .module light weight.
+  gpt_ads_settings_form($form, $form_state);
+}
+
+/**
+ * Implements hook_page_build().
+ */
+function gpt_page_build(&$page) {
+  $ads = gpt_ad_register();
+
+  if (!empty($ads)) {
+    // Prepare page options.
+    $options = array(
+      'networkCode' => variable_get('gpt__network_code', ''),
+      'targetedAdUnit' => variable_get('gpt__targeted_ad_unit', ''),
+      'async' => variable_get('gpt__async', 1),
+      'sra' => variable_get('gpt__sra', 1),
+      'collapse' => variable_get('gpt__collapse', 0),
+      'targeting' => array(),
+    );
+    drupal_alter('gpt_ad_page_options', $options);
+
+    // Ensure network code exists.
+    if (empty($options['networkCode']) || empty($options['targetedAdUnit'])) {
+      if (user_access('administer ad manager')) {
+        drupal_set_message(t('Google Publisher Tag ads should be shown on this page, but <a href="!url">key configurations</a> have not been set.',
+            array('!url' => url('admin/structure/ad-manager/settings'))), 'warning');
+      }
+      return;
+    }
+
+    $settings = '';
+
+    // Prepare slots and settings.
+    foreach ($ads as $ad) {
+      // Allow modules to alter individual ads before definition.
+      drupal_alter('gpt_ad_slot_settings', $ad, $options);
+
+      // Define slot.
+      if ($ad['outofpage']) {
+        $settings .= "googletag.defineOutOfPageSlot('/{$options['networkCode']}/{$options['targetedAdUnit']}','{$ad['container']}')";
+      }
+      else {
+        $settings .= "googletag.defineSlot('/{$options['networkCode']}/{$options['targetedAdUnit']}',{$ad['size']},'{$ad['container']}')";
+      }
+      $settings .= '.addService(googletag.pubads())';
+      foreach ($ad['targeting']['prep'] as $k => $v) {
+        $settings .= ".setTargeting('$k', $v)";
+      }
+      $settings .= ';';
+    }
+
+    // Apply page wide targeting.
+    if (!empty($options['targeting'])) {
+      foreach ($options['targeting'] as $k => $v) {
+        $settings .= "googletag.pubads().setTargeting('$k','$v');";
+      }
+    }
+
+    // Collapse div elements when there is no creative to display.
+    if ($options['collapse']) {
+      $settings .= 'googletag.pubads().collapseEmptyDivs();';
+    }
+
+    // Enable Single Request mode.
+    if ($options['sra']) {
+      $settings .= 'googletag.pubads().enableSingleRequest();';
+    }
+
+    // Boiler-plate initialization of GPT.
+    if ($options['async']) {
+      $boilerplate = 'var googletag=googletag || {};googletag.cmd=googletag.cmd || [];(function(){var gads=document.createElement("script");gads.async=true;gads.type="text/javascript";var useSSL="https:" == document.location.protocol;gads.src=(useSSL ? "https:" : "http:")+"//www.googletagservices.com/tag/js/gpt.js";var node=document.getElementsByTagName("script")[0];node.parentNode.insertBefore(gads, node);})();';
+
+      // Wrap slot settings for async and enable services.
+      $settings = 'googletag.cmd.push(function(){' . $settings . 'googletag.enableServices();});';
+    }
+    else {
+      $boilerplate = '(function() {var useSSL="https:" == document.location.protocol;var src=(useSSL ? "https:" : "http:")+"//www.googletagservices.com/tag/js/gpt.js";document.write("<scr"+"ipt src=\""+src+"\"></scr"+"ipt>");})();';
+
+      // Set slot settings to sync mode and enable services.
+      $settings .= 'googletag.pubads().enableSyncRendering();googletag.enableServices();';
+    }
+
+    // Write out JS.
+    drupal_add_js($boilerplate, array('type' => 'inline', 'weight' => -18));
+    drupal_add_js($settings, array('type' => 'inline', 'weight' => -16));
+  }
+}
+
+function gpt_prepare_size($sizes) {
+  // TODO: Set up prepare size to use this instead.
+}
+
+/**
+ * Prepare targeting source values converting into array of JSON values.
+ *
+ * @param array $src
+ *   A multi-dimensional array containing targeting keys with a value of an
+ *   indexed array containing an associative array:
+ *   - key: The key name for targeting with a value of an indexed array.
+ *     - indexed array
+ *       - value: String for the value.
+ *       - eval: Boolean, whether to treat the value key as Javascript, if true.
+ *
+ * @return array
+ *   An associative array containing targeting keys with a value related to a
+ *   JSON string or JSON array of strings.
+ */
+function gpt_prepare_targeting($src) {
+  $prep = array();
+
+  foreach ($src as $k => $j) {
+    // Iterate
+    $prep[$k] = '';
+    for ($i = 0; $i < count($j); $i++) {
+      // If not first iteration begin with comma separation.
+      if ($i) {
+        $prep[$k] .= ',';
+      }
+      $prep[$k] .= gpt_prepare_targeting_value($j[$i]['value'], $j[$i]['eval']);
+    }
+    // Wrap with surrounding brackets for JSON if more than one value.
+    if ($i > 1) {
+      $prep[$k] = '[' . $prep[$k] . ']';
+    }
+  }
+
+  return $prep;
+}
+
+/**
+ * Prepare targeting value for use in GPT's JSON.
+ *
+ * @param string $value
+ * @param boolean $value
+ *
+ * @return string
+ */
+function gpt_prepare_targeting_value($value, $eval) {
+  // If not an eval then wrap in quotes to make a string and escape quotes
+  // with a literal \'.
+  if (!$eval) {
+    return '\'' . str_replace('\'', '\\\'', $value) . '\'';
+  }
+
+  // Otherwise we have to assume the Javascript is valid.
+  return $value;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function gpt_theme($existing, $type, $theme, $path) {
+  return array(
+    'gpt_ads' => array(
+      'variables' => array('name' => NULL, 'settings' => NULL, 'index' => NULL),
+    ),
+  );
+}
+
+/**
+ * Form element validate callback wrapper.
+ *
+ * Required to place in .module for global scope due to an AJAX call.
+ */
+function gpt_validate_size($element, &$form_state, $form) {
+  ctools_include('gpt.admin', 'gpt', FALSE);
+  _gpt_ads_validate_size($element, $form_state, $form);
+}
+
+/**
+ * Form element validate callback wrapper.
+ *
+ * Required to place in .module for global scope due to an AJAX call.
+ */
+function gpt_validate_targeting($element, &$form_state, $form) {
+  ctools_include('gpt.admin', 'gpt', FALSE);
+  _gpt_validate_targeting($element, $form_state, $form);
+}
+
+/**
+ * Theme GPT Ads.
+ */
+function theme_gpt_ads($vars) {
+  // Register the settings for the Javascript.
+  gpt_ad_register($vars['name'], $vars['settings']['gpt_ads'], $vars['index']);
+
+  $script = 'googletag.display("ad-manager-ad-' . $vars['name'] . '-' . $vars['index'] . '");';
+
+  // If async wrap in googletag.cmd.push.
+  if (variable_get('gpt__async', 1)) {
+    $script = 'googletag.cmd.push(function(){' . $script . '});';
+  }
+
+  return '<script type="text/javascript">' . $script .  '</script>';
+}
+
