@@ -125,9 +125,15 @@ function gpt_ads_submit(&$form, &$form_state) {
   $settings['size'] = $form_state['values']['gpt_ads_size'];
   $settings['outofpage'] = $form_state['values']['gpt_ads_outofpage'];
 
-  // Store targeting.
-  $settings['targeting']['src'] = $form_state['targeting'];
-  $settings['targeting']['prep'] = gpt_prepare_targeting($form_state['targeting']);
+  // Store targeting, iterate over elements.
+  $settings['targeting']['src'] = array();
+  foreach ($form_state['values']['gpt_ads_targeting_wrapper'] as $v) {
+    // Only attempt to store the key/value pair if both key and value are set.
+    if (!empty($v['key']) && !empty($v['value'])) {
+      $settings['targeting']['src'][$v['key']][] = array('value' => $v['value'], 'eval' => $v['eval']);
+    }
+  }
+  $settings['targeting']['prep'] = gpt_prepare_targeting($settings['targeting']['src']);
 }
 
 /**
@@ -346,12 +352,8 @@ function _gpt_validate_targeting($element, &$form_state, $form) {
   $value = $element['value']['#value'];
   $eval = $element['eval']['#value'];
 
-  // Only attempt to store the key/value pair if both key and value are set.
-  if (!empty($key) && !empty($value)) {
-    $form_state['targeting'][$key][] = array('value' => $value, 'eval' => $eval);
-  }
-  // Else if key or value has been set then set an error on the empty one.
-  elseif (!empty($key) || !empty($value)) {
+  // If key or value has been set, but not both, then set an error on the empty one.
+  if (!(!empty($key) && !empty($value)) && !(empty($key) && empty($value))) {
     // Attach admin CSS if there is an error.
     _gpt_admin_attach_css();
 
