@@ -37,7 +37,7 @@ function gpt_ads_form(&$form, &$form_state) {
   $targeting = isset($settings['targeting']) ? $settings['targeting'] : array();
   _gpt_targeting_prep($form_state, $targeting);
   // Add targeting form elements.
-  _gpt_targeting_form_elements($form, $form_state);
+  _gpt_targeting_form_elements($form, $form_state, 'gpt_ads_form_ajax_targeting_callback');
 
   // Add CSS to make targeting pairs appear inline.
   _gpt_admin_attach_css();
@@ -55,14 +55,6 @@ function gpt_ads_form_ajax_outofpage_callback($form, $form_state) {
  */
 function gpt_ads_form_ajax_targeting_callback($form, $form_state) {
   return $form['gpt_targeting_wrapper'];
-}
-
-/**
- * Submit handler for the add more button.
- */
-function gpt_ads_form_targeting_add($form, &$form_state) {
-  $form_state['gpt_targeting_num']++;
-  $form_state['rebuild'] = TRUE;
 }
 
 /**
@@ -140,6 +132,14 @@ function gpt_ads_settings_submit(&$form, &$form_state) {
   foreach ($form_state['values']['gpt'] as $key => $value) {
     variable_set('gpt__' . $key, $value);
   }
+}
+
+/**
+ * Submit handler for the add more targeting button.
+ */
+function gpt_form_targeting_add($form, &$form_state) {
+  $form_state['gpt_targeting_num']++;
+  $form_state['rebuild'] = TRUE;
 }
 
 /**
@@ -230,10 +230,12 @@ function _gpt_ads_validate_size($element, &$form_state, $form) {
  *
  * @param array $form
  * @param array $form_state
+ * @param string $ajax_callback
+ *   The function to callback upon AJAX add more button.
  *
  * @return void
  */
-function _gpt_targeting_form_elements(&$form, &$form_state) {
+function _gpt_targeting_form_elements(&$form, &$form_state, $ajax_callback) {
   $form['gpt_targeting_label'] = array(
     '#type' => 'item',
     '#title' => t('Slot-level customized targeting'),
@@ -288,9 +290,9 @@ function _gpt_targeting_form_elements(&$form, &$form_state) {
   $form['gpt_targeting_add'] = array(
     '#type' => 'submit',
     '#value' => t('Add more'),
-    '#submit' => array('gpt_ads_form_targeting_add'),
+    '#submit' => array('gpt_form_targeting_add'),
     '#ajax' => array(
-      'callback' => 'gpt_ads_form_ajax_targeting_callback',
+      'callback' => $ajax_callback,
       'wrapper' => 'gpt-targeting',
     ),
   );
