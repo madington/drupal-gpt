@@ -240,7 +240,7 @@ function _gpt_targeting_form_elements(&$form, &$form_state) {
     '#description' => t('Provide key values pairs for slot-level customized targeting below.'),
   );
   $form['gpt_targeting_wrapper'] = array(
-    '#prefix' => '<div id="gpt-ads-targeting">',
+    '#prefix' => '<div id="gpt-targeting">',
     '#suffix' => '</div>',
   );
 
@@ -291,7 +291,7 @@ function _gpt_targeting_form_elements(&$form, &$form_state) {
     '#submit' => array('gpt_ads_form_targeting_add'),
     '#ajax' => array(
       'callback' => 'gpt_ads_form_ajax_targeting_callback',
-      'wrapper' => 'gpt-ads-targeting',
+      'wrapper' => 'gpt-targeting',
     ),
   );
 }
