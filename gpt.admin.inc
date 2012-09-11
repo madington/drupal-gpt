@@ -6,7 +6,6 @@
 function gpt_ads_form(&$form, &$form_state) {
   $settings =& $form_state['item']->settings['gpt_ads'];
   $outofpage = _gpt_ads_is_outofpage($form_state, $settings);
-  _gpt_ads_prep_targeting($form_state, $settings);
 
   // Create form here, for values use $settings[$key]
   $form['gpt_ads_size'] = array(
@@ -32,68 +31,13 @@ function gpt_ads_form(&$form, &$form_state) {
     ),
   );
 
-  $form['gpt_ads_targeting_label'] = array(
-    '#type' => 'item',
-    '#title' => t('Slot-level customized targeting'),
-    '#description' => t('Provide key values pairs for slot-level customized targeting below.'),
-  );
-  $form['gpt_ads_targeting_wrapper'] = array(
-    '#prefix' => '<div id="gpt-ads-targeting">',
-    '#suffix' => '</div>',
-  );
-
   // Targeting fields have the same keys, we have to set #tree to access them.
   $form['#tree'] = TRUE;
-  // Determine if the user is allowed to alter/create Javascript targeting.
-  $js_perm = user_access('gpt set javascript');
-  // Build the fields with the proper number of targeting fields.
-  for ($i = 0; $i < $form_state['gpt_ads_targeting_num']; $i++) {
-    $default = isset($form_state['gpt_ads_targeting_defaults'][$i]) ? $form_state['gpt_ads_targeting_defaults'][$i] : FALSE;
-    $form['gpt_ads_targeting_wrapper'][$i] = array(
-      '#prefix' => '<div class="inline clearfix">',
-      '#suffix' => '</div>',
-      '#element_validate' => array('gpt_validate_targeting'),
-    );
-    $form['gpt_ads_targeting_wrapper'][$i]['key'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Key'),
-      '#size' => 15,
-      '#default_value' => $default ? $default['key'] : '',
-    );
-    $form['gpt_ads_targeting_wrapper'][$i]['value'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Value'),
-      '#size' => 25,
-      '#default_value' => $default ? $default['value'] : '',
-    );
-    // Prevent users without the appropriate permission from setting Javascript.
-    if ($default['eval'] && !$js_perm) {
-      $form['gpt_ads_targeting_wrapper'][$i]['key']['#disabled'] = TRUE;
-      $form['gpt_ads_targeting_wrapper'][$i]['value']['#disabled'] = TRUE;
-    }
-    $form['gpt_ads_targeting_wrapper'][$i]['eval'] = array(
-      '#type' => 'checkbox',
-      '#title' => t('Value is Javascript'),
-      '#default_value' => $default ? $default['eval'] : '',
-      '#disabled' => !$js_perm,
-    );
-  }
-
-  $form['gpt_ads_targeting_eval_desc'] = array(
-    '#type' => 'item',
-    '#description' => t('If the value is Javascript checkbox is used for a value, and the value is not valid Javascript, you will cause errors on the site which will upredictably break site functionality.'),
-  );
-
-  // Build add button.
-  $form['gpt_ads_targeting_add'] = array(
-    '#type' => 'submit',
-    '#value' => t('Add more'),
-    '#submit' => array('gpt_ads_form_targeting_add'),
-    '#ajax' => array(
-      'callback' => 'gpt_ads_form_ajax_targeting_callback',
-      'wrapper' => 'gpt-ads-targeting',
-    ),
-  );
+  // Prepare targeting values needed.
+  $targeting = isset($settings['targeting']) ? $settings['targeting'] : array();
+  _gpt_targeting_prep($form_state, $targeting);
+  // Add targeting form elements.
+  _gpt_targeting_form_elements($form, $form_state);
 
   // Add CSS to make targeting pairs appear inline.
   _gpt_admin_attach_css();
@@ -110,14 +54,14 @@ function gpt_ads_form_ajax_outofpage_callback($form, $form_state) {
  * Ajax callback from changing outofpage field.
  */
 function gpt_ads_form_ajax_targeting_callback($form, $form_state) {
-  return $form['gpt_ads_targeting_wrapper'];
+  return $form['gpt_targeting_wrapper'];
 }
 
 /**
  * Submit handler for the add more button.
  */
 function gpt_ads_form_targeting_add($form, &$form_state) {
-  $form_state['gpt_ads_targeting_num']++;
+  $form_state['gpt_targeting_num']++;
   $form_state['rebuild'] = TRUE;
 }
 
@@ -135,7 +79,7 @@ function gpt_ads_submit(&$form, &$form_state) {
 
   // Store targeting, iterate over elements.
   $settings['targeting']['src'] = array();
-  foreach ($form_state['values']['gpt_ads_targeting_wrapper'] as $v) {
+  foreach ($form_state['values']['gpt_targeting_wrapper'] as $v) {
     // Only attempt to store the key/value pair if both key and value are set.
     if (!empty($v['key']) && !empty($v['value'])) {
       $settings['targeting']['src'][$v['key']][] = array('value' => $v['value'], 'eval' => $v['eval']);
@@ -229,47 +173,6 @@ function _gpt_ads_is_outofpage($form_state, $settings = array()) {
 }
 
 /**
- * Prepare targeting values for use in form builder.
- *
- * @param array $form_state
- * @param array $settings
- *
- * @return void
- */
-function _gpt_ads_prep_targeting(&$form_state, $settings = array()) {
-  // If targeting num is already set prep has already been completed.
-  if (!empty($form_state['gpt_ads_targeting_num'])) {
-    return;
-  }
-
-  // Attempt to load stored settings.
-  if (isset($settings['targeting'])) {
-    // If loading stored settings reset targeting num and defaults.
-   $form_state['gpt_ads_targeting_num'] = $i = 0;
-
-    // Iterate over stored values.
-    foreach ($settings['targeting']['src'] as $key => $j) {
-      foreach ($j as $v) {
-        $form_state['gpt_ads_targeting_defaults'][$i] = array(
-          'key' => $key,
-          'value' => $v['value'],
-          'eval' => $v['eval'],
-        );
-        $i++;
-      }
-    }
-
-    // Set targeting num so that form builder will show correct fields.
-    $form_state['gpt_ads_targeting_num'] = $i;
-  }
-
-  // Initialize form state's gpt_ads_targeting_num if not set.
-  if (empty($form_state['gpt_ads_targeting_num'])) {
-    $form_state['gpt_ads_targeting_num'] = 1;
-  }
-}
-
-/**
  * Convert JSON size array to more human friendly width by height format.
  *
  * @param string|NULL $json
@@ -319,6 +222,119 @@ function _gpt_ads_validate_size($element, &$form_state, $form) {
   if (!preg_match('#^[1-9][0-9]*x[1-9][0-9]*(?:,[1-9][0-9]*x[1-9][0-9]*)*$#', $element['#value'])) {
     _gpt_admin_attach_css();
     form_error($element, t('Ad slot creative size does not match the expected format.'));
+  }
+}
+
+/**
+ * Elements
+ *
+ * @param array $form
+ * @param array $form_state
+ *
+ * @return void
+ */
+function _gpt_targeting_form_elements(&$form, &$form_state) {
+  $form['gpt_targeting_label'] = array(
+    '#type' => 'item',
+    '#title' => t('Slot-level customized targeting'),
+    '#description' => t('Provide key values pairs for slot-level customized targeting below.'),
+  );
+  $form['gpt_targeting_wrapper'] = array(
+    '#prefix' => '<div id="gpt-ads-targeting">',
+    '#suffix' => '</div>',
+  );
+
+  // Determine if the user is allowed to alter/create Javascript targeting.
+  $js_perm = user_access('gpt set javascript');
+  // Build the fields with the proper number of targeting fields.
+  for ($i = 0; $i < $form_state['gpt_targeting_num']; $i++) {
+    $default = isset($form_state['gpt_targeting_defaults'][$i]) ? $form_state['gpt_targeting_defaults'][$i] : FALSE;
+    $form['gpt_targeting_wrapper'][$i] = array(
+      '#prefix' => '<div class="inline clearfix">',
+      '#suffix' => '</div>',
+      '#element_validate' => array('gpt_validate_targeting'),
+    );
+    $form['gpt_targeting_wrapper'][$i]['key'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Key'),
+      '#size' => 15,
+      '#default_value' => $default ? $default['key'] : '',
+    );
+    $form['gpt_targeting_wrapper'][$i]['value'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Value'),
+      '#size' => 25,
+      '#default_value' => $default ? $default['value'] : '',
+    );
+    // Prevent users without the appropriate permission from setting Javascript.
+    if ($default['eval'] && !$js_perm) {
+      $form['gpt_targeting_wrapper'][$i]['key']['#disabled'] = TRUE;
+      $form['gpt_targeting_wrapper'][$i]['value']['#disabled'] = TRUE;
+    }
+    $form['gpt_targeting_wrapper'][$i]['eval'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Value is Javascript'),
+      '#default_value' => $default ? $default['eval'] : '',
+      '#disabled' => !$js_perm,
+    );
+  }
+
+  $form['gpt_targeting_eval_desc'] = array(
+    '#type' => 'item',
+    '#description' => t('If the value is Javascript checkbox is used for a value, and the value is not valid Javascript, you will cause errors on the site which will upredictably break site functionality.'),
+  );
+
+  // Build add button.
+  $form['gpt_targeting_add'] = array(
+    '#type' => 'submit',
+    '#value' => t('Add more'),
+    '#submit' => array('gpt_ads_form_targeting_add'),
+    '#ajax' => array(
+      'callback' => 'gpt_ads_form_ajax_targeting_callback',
+      'wrapper' => 'gpt-ads-targeting',
+    ),
+  );
+}
+
+/**
+ * Prepare targeting values for use in form builder.
+ *
+ * @param array $form_state
+ * @param array $targeting
+ *   Pre-stored targeting settings.
+ *
+ * @return void
+ */
+function _gpt_targeting_prep(&$form_state, $targeting = array()) {
+  // If targeting num is already set prep has already been completed.
+  if (!empty($form_state['gpt_targeting_num'])) {
+    return;
+  }
+
+  // Attempt to load stored settings.
+  if (!empty($targeting)) {
+    // If loading stored settings reset targeting num and defaults.
+   $form_state['gpt_targeting_num'] = $i = 0;
+
+    // Iterate over stored values.
+    foreach ($targeting['src'] as $key => $j) {
+      foreach ($j as $v) {
+        $form_state['gpt_targeting_defaults'][$i] = array(
+          'key' => $key,
+          'value' => $v['value'],
+          'eval' => $v['eval'],
+        );
+        $i++;
+      }
+    }
+
+    // Set targeting num so that form builder will show correct fields.
+    $form_state['gpt_targeting_num'] = $i;
+  }
+
+  // Initialize form state's gpt_targeting_num if not set.
+  if (empty($form_state['gpt_targeting_num'])) {
+    $form_state['gpt_targeting_num'] = 1;
   }
 }
 
