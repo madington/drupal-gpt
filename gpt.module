@@ -112,7 +112,7 @@ function gpt_page_build(&$page) {
       }
       $settings .= '.addService(googletag.pubads())';
       foreach ($ad['targeting']['prep'] as $k => $v) {
-        $settings .= ".setTargeting('$k', $v)";
+        $settings .= ".setTargeting('$k',$v)";
       }
       $settings .= ';';
     }
