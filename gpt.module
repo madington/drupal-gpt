@@ -70,88 +70,96 @@ function gpt_form_ad_manager_settings_form_alter(&$form, &$form_state) {
 }
 
 /**
+ * Load page level ad settings.
+ *
+ * @return array
+ *   Page option associative array containing:
+ *   - networkCode: The network for serving ads from, string.
+ *   - targetedAdUnit: The ad unit hiearchy, string.
+ *   - async: Use asynchrounous mode, boolean.
+ *   - sra: Use single request architecture, boolean.
+ *   - collapse: Collapse divs without creatives, boolean.
+ *   - targeting: Page level targeting, multi-dimensional array.
+ */
+function gpt_load_page_options() {
+  $options = array(
+    'networkCode' => variable_get('gpt__network_code', ''),
+    'targetedAdUnit' => variable_get('gpt__targeted_ad_unit', ''),
+    'async' => variable_get('gpt__async', 1),
+    'sra' => variable_get('gpt__sra', 1),
+    'collapse' => variable_get('gpt__collapse', 0),
+    'targeting' => variable_get('gpt__targeting', array('src' => array())),
+  );
+  drupal_alter('gpt_ad_page_options', $options);
+  return $options;
+}
+
+/**
  * Implements hook_page_build().
  */
-function gpt_page_build(&$page) {
+function gpt_page_build() {
   $ads = gpt_ad_register();
 
-  if (!empty($ads)) {
-    // Prepare page options.
-    $options = array(
-      'networkCode' => variable_get('gpt__network_code', ''),
-      'targetedAdUnit' => variable_get('gpt__targeted_ad_unit', ''),
-      'async' => variable_get('gpt__async', 1),
-      'sra' => variable_get('gpt__sra', 1),
-      'collapse' => variable_get('gpt__collapse', 0),
-      'targeting' => array(),
-    );
-    drupal_alter('gpt_ad_page_options', $options);
-
-    // Ensure network code exists.
-    if (empty($options['networkCode']) || empty($options['targetedAdUnit'])) {
-      if (user_access('administer ad manager')) {
-        drupal_set_message(t('Google Publisher Tag ads should be shown on this page, but <a href="!url">key configurations</a> have not been set.',
-            array('!url' => url('admin/structure/ad-manager/settings'))), 'warning');
-      }
-      return;
-    }
-
-    $settings = '';
-
-    // Prepare slots and settings.
-    foreach ($ads as $ad) {
-      // Allow modules to alter individual ads before definition.
-      drupal_alter('gpt_ad_slot_settings', $ad, $options);
-
-      // Define slot.
-      if ($ad['outofpage']) {
-        $settings .= "googletag.defineOutOfPageSlot('/{$options['networkCode']}/{$options['targetedAdUnit']}','{$ad['container']}')";
-      }
-      else {
-        $settings .= "googletag.defineSlot('/{$options['networkCode']}/{$options['targetedAdUnit']}',{$ad['size']},'{$ad['container']}')";
-      }
-      $settings .= '.addService(googletag.pubads())';
-      foreach ($ad['targeting']['prep'] as $k => $v) {
-        $settings .= ".setTargeting('$k',$v)";
-      }
-      $settings .= ';';
-    }
-
-    // Apply page wide targeting.
-    if (!empty($options['targeting'])) {
-      foreach ($options['targeting'] as $k => $v) {
-        $settings .= "googletag.pubads().setTargeting('$k','$v');";
-      }
-    }
-
-    // Collapse div elements when there is no creative to display.
-    if ($options['collapse']) {
-      $settings .= 'googletag.pubads().collapseEmptyDivs();';
-    }
-
-    // Enable Single Request mode.
-    if ($options['sra']) {
-      $settings .= 'googletag.pubads().enableSingleRequest();';
-    }
-
-    // Boiler-plate initialization of GPT.
-    if ($options['async']) {
-      $boilerplate = 'var googletag=googletag || {};googletag.cmd=googletag.cmd || [];(function(){var gads=document.createElement("script");gads.async=true;gads.type="text/javascript";var useSSL="https:" == document.location.protocol;gads.src=(useSSL ? "https:" : "http:")+"//www.googletagservices.com/tag/js/gpt.js";var node=document.getElementsByTagName("script")[0];node.parentNode.insertBefore(gads, node);})();';
-
-      // Wrap slot settings for async and enable services.
-      $settings = 'googletag.cmd.push(function(){' . $settings . 'googletag.enableServices();});';
-    }
-    else {
-      $boilerplate = '(function() {var useSSL="https:" == document.location.protocol;var src=(useSSL ? "https:" : "http:")+"//www.googletagservices.com/tag/js/gpt.js";document.write("<scr"+"ipt src=\""+src+"\"></scr"+"ipt>");})();';
-
-      // Set slot settings to sync mode and enable services.
-      $settings .= 'googletag.pubads().enableSyncRendering();googletag.enableServices();';
-    }
-
-    // Write out JS.
-    drupal_add_js($boilerplate, array('type' => 'inline', 'weight' => -18));
-    drupal_add_js($settings, array('type' => 'inline', 'weight' => -16));
+  // Only proceed if there are ads to render.
+  if (empty($ads)) {
+    return;
   }
+
+  $options = gpt_load_page_options();
+  // Ensure network code exists.
+  if (empty($options['networkCode']) || empty($options['targetedAdUnit'])) {
+    if (user_access('administer ad manager')) {
+      drupal_set_message(t('Google Publisher Tag ads should be shown on this page, but <a href="!url">key configurations</a> have not been set.',
+          array('!url' => url('admin/structure/ad-manager/settings'))), 'warning');
+    }
+    return;
+  }
+
+  $settings = '';
+
+  // Prepare slots and settings.
+  foreach ($ads as $ad) {
+    $settings .= gpt_prepare_ad($ad, $options);
+  }
+
+  // Apply page wide targeting.
+  if (!empty($options['targeting']['src'])) {
+    // If prep has not been generated then create it.
+    if (!isset($options['targeting']['prep'])) {
+      $options['targeting']['prep'] = gpt_prepare_targeting($options['targeting']['src']);
+    }
+    foreach ($options['targeting'] as $k => $v) {
+      $settings .= "googletag.pubads().setTargeting('$k','$v');";
+    }
+  }
+
+  // Collapse div elements when there is no creative to display.
+  if ($options['collapse']) {
+    $settings .= 'googletag.pubads().collapseEmptyDivs();';
+  }
+
+  // Enable Single Request mode.
+  if ($options['sra']) {
+    $settings .= 'googletag.pubads().enableSingleRequest();';
+  }
+
+  // Boiler-plate initialization of GPT.
+  if ($options['async']) {
+    $boilerplate = 'var googletag=googletag || {};googletag.cmd=googletag.cmd || [];(function(){var gads=document.createElement("script");gads.async=true;gads.type="text/javascript";var useSSL="https:" == document.location.protocol;gads.src=(useSSL ? "https:" : "http:")+"//www.googletagservices.com/tag/js/gpt.js";var node=document.getElementsByTagName("script")[0];node.parentNode.insertBefore(gads, node);})();';
+
+    // Wrap slot settings for async and enable services.
+    $settings = 'googletag.cmd.push(function(){' . $settings . 'googletag.enableServices();});';
+  }
+  else {
+    $boilerplate = '(function() {var useSSL="https:" == document.location.protocol;var src=(useSSL ? "https:" : "http:")+"//www.googletagservices.com/tag/js/gpt.js";document.write("<scr"+"ipt src=\""+src+"\"></scr"+"ipt>");})();';
+
+    // Set slot settings to sync mode and enable services.
+    $settings .= 'googletag.pubads().enableSyncRendering();googletag.enableServices();';
+  }
+
+  // Write out JS.
+  drupal_add_js($boilerplate, array('type' => 'inline', 'weight' => -18));
+  drupal_add_js($settings, array('type' => 'inline', 'weight' => -16));
 }
 
 /**
@@ -164,6 +172,52 @@ function gpt_permission() {
       'description' => t('Allow users to create and edit Javascript targeting values. Potential to break Javascript on the site.'),
     ),
   );
+}
+
+/**
+ * Prepare GPT ad definition.
+ *
+ * @param array $ad
+ *   Associate array containing:
+ *   - container: The containing element ID of the ad unit.
+ *   - size: The JSON array size value of the unit.
+ *   - targeting:
+ *     - src: The source array for targeting, see gpt_prepare_targeting().
+ *     - prep (optional): The "compiled" src, an array of JSON strings or JSON
+ *       array of strings.
+ * @param array $options
+ *   Page level options associative array:
+ *   - networkCode: The DoubleClick network code the ad should be displayed
+ *     through.
+ *   - targetedAdUnit: The GPT hierarchy.
+ *
+ * @return string
+ */
+function gpt_prepare_ad($ad, $options) {
+  // Allow modules to alter individual ads before definition.
+  drupal_alter('gpt_ad_slot_settings', $ad, $options);
+
+  // Define slot.
+  if ($ad['outofpage']) {
+    $string = "googletag.defineOutOfPageSlot('/{$options['networkCode']}/{$options['targetedAdUnit']}','{$ad['container']}')";
+  }
+  else {
+    $string = "googletag.defineSlot('/{$options['networkCode']}/{$options['targetedAdUnit']}',{$ad['size']},'{$ad['container']}')";
+  }
+
+  $string .= '.addService(googletag.pubads())';
+
+  // If prep has not been generated then create it.
+  if (!isset($ad['targeting']['prep'])) {
+    gpt_prepare_targeting($ad['targeting']['src']);
+  }
+
+  // Set targeting.
+  foreach ($ad['targeting']['prep'] as $k => $v) {
+    $string .= ".setTargeting('$k',$v)";
+  }
+
+  return $string . ';';
 }
 
 /**
@@ -258,7 +312,7 @@ function gpt_prepare_targeting_value($value, $eval) {
 /**
  * Implements hook_theme().
  */
-function gpt_theme($existing, $type, $theme, $path) {
+function gpt_theme() {
   return array(
     'gpt_ads' => array(
       'variables' => array('name' => NULL, 'settings' => NULL, 'index' => NULL),
