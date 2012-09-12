@@ -128,8 +128,8 @@ function gpt_page_build() {
     if (!isset($options['targeting']['prep'])) {
       $options['targeting']['prep'] = gpt_prepare_targeting($options['targeting']['src']);
     }
-    foreach ($options['targeting'] as $k => $v) {
-      $settings .= "googletag.pubads().setTargeting('$k','$v');";
+    foreach ($options['targeting']['prep'] as $k => $v) {
+      $settings .= "googletag.pubads().setTargeting('$k',$v);";
     }
   }
 

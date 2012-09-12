@@ -31,6 +31,13 @@ function gpt_ads_form(&$form, &$form_state) {
     ),
   );
 
+  $form['gpt_targeting_label'] = array(
+    '#type' => 'item',
+    '#title' => t('Slot-level customized targeting'),
+    '#description' => t('Provide key-value pairs for slot-level customized targeting. Multiple values may be associated with one key.'),
+    '#attributes' => array('class' => array('gpt-targeting-label')),
+  );
+
   // Targeting fields have the same keys, we have to set #tree to access them.
   $form['#tree'] = TRUE;
   // Prepare targeting values needed.
@@ -51,7 +58,7 @@ function gpt_ads_form_ajax_outofpage_callback($form, $form_state) {
 }
 
 /**
- * Ajax callback from changing outofpage field.
+ * Ajax callback from using targeting add more button.
  */
 function gpt_ads_form_ajax_targeting_callback($form, $form_state) {
   return $form['gpt_targeting_wrapper'];
@@ -120,18 +127,52 @@ function gpt_ads_settings_form(&$form, &$form_state) {
       '#description' => t('Collapse empty div elements when there is no creative to display.'),
       '#default_value' => variable_get('gpt__collapse', 0),
     ),
+    'gpt_targeting_label' => array(
+      '#type' => 'item',
+      '#title' => t('Page-level customized targeting'),
+      '#description' => t('Provide key-value pairs to apply to all ad slots on all pages. Multiple values may be associated with one key.'),
+      '#attributes' => array('class' => array('gpt-targeting-label')),
+    ),
   );
 
+  // Prepare targeting values needed.
+  $targeting = variable_get('gpt__targeting', array('src' => array()));
+  _gpt_targeting_prep($form_state, $targeting);
+  // Add targeting form elements.
+  _gpt_targeting_form_elements($form['gpt'], $form_state, 'gpt_ads_settings_ajax_targeting_callback');
+
+  // Add CSS to make targeting pairs appear inline.
+  _gpt_admin_attach_css();
+
   $form['#submit'][] = 'gpt_ads_settings_submit';
+}
+
+/**
+ * Ajax callback from using targeting add more button.
+ */
+function gpt_ads_settings_ajax_targeting_callback($form, $form_state) {
+  return $form['gpt']['gpt_targeting_wrapper'];
 }
 
 /**
  * Global config form submission handler.
  */
 function gpt_ads_settings_submit(&$form, &$form_state) {
-  foreach ($form_state['values']['gpt'] as $key => $value) {
-    variable_set('gpt__' . $key, $value);
+  $keys = array('network_code', 'targeted_ad_unit', 'async', 'sra', 'collapse');
+  foreach ($keys as $key) {
+    variable_set('gpt__' . $key, $form_state['values']['gpt'][$key]);
   }
+
+  // Store targeting, iterate over elements.
+  $targeting['src'] = array();
+  foreach ($form_state['values']['gpt']['gpt_targeting_wrapper'] as $v) {
+    // Only attempt to store the key/value pair if both key and value are set.
+    if (!empty($v['key']) && !empty($v['value'])) {
+      $targeting['src'][$v['key']][] = array('value' => $v['value'], 'eval' => $v['eval']);
+    }
+  }
+  $targeting['prep'] = gpt_prepare_targeting($targeting['src']);
+  variable_set('gpt__targeting', $targeting);
 }
 
 /**
@@ -236,11 +277,6 @@ function _gpt_ads_validate_size($element, &$form_state, $form) {
  * @return void
  */
 function _gpt_targeting_form_elements(&$form, &$form_state, $ajax_callback) {
-  $form['gpt_targeting_label'] = array(
-    '#type' => 'item',
-    '#title' => t('Slot-level customized targeting'),
-    '#description' => t('Provide key values pairs for slot-level customized targeting below.'),
-  );
   $form['gpt_targeting_wrapper'] = array(
     '#prefix' => '<div id="gpt-targeting">',
     '#suffix' => '</div>',
@@ -283,7 +319,10 @@ function _gpt_targeting_form_elements(&$form, &$form_state, $ajax_callback) {
 
   $form['gpt_targeting_eval_desc'] = array(
     '#type' => 'item',
-    '#description' => t('If the value is Javascript checkbox is used for a value, and the value is not valid Javascript, you will cause errors on the site which will upredictably break site functionality.'),
+    '#description' => t('If the <em>value is Javascript</em> setting is used for a value, and the value is not valid Javascript, errors will be caused on the site which will upredictably break site functionality.'),
+    // #type item doesn't support attributes so we have to use prefix/suffix.
+    '#prefix' => '<div class="gpt-targeting-eval-desc">',
+    '#suffix' => '</div>',
   );
 
   // Build add button.
@@ -291,6 +330,7 @@ function _gpt_targeting_form_elements(&$form, &$form_state, $ajax_callback) {
     '#type' => 'submit',
     '#value' => t('Add more'),
     '#submit' => array('gpt_form_targeting_add'),
+    '#attributes' => array('class' => array('gpt-targeting-add')),
     '#ajax' => array(
       'callback' => $ajax_callback,
       'wrapper' => 'gpt-targeting',

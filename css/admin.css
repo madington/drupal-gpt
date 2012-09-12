@@ -7,16 +7,16 @@
   margin-top: 1.5em;
 }
 
-#edit-gpt-targeting-label {
+.gpt-targeting-label {
   margin-bottom: 0;
   padding-bottom: 0;
 }
 
-#edit-gpt-targeting-eval-desc {
+.gpt-targeting-eval-desc {
   padding-top: 0;
   margin-left: 1.5em;
 }
 
-#edit-gpt-targeting-add {
+.gpt-targeting-add {
   margin-left: 1.5em;
 }
