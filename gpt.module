@@ -185,6 +185,7 @@ function gpt_permission() {
  *     - src: The source array for targeting, see gpt_prepare_targeting().
  *     - prep (optional): The "compiled" src, an array of JSON strings or JSON
  *       array of strings.
+ *   - outofpage: Whether the ad is an interstitial or not.
  * @param array $options
  *   Page level options associative array:
  *   - networkCode: The DoubleClick network code the ad should be displayed
