@@ -88,9 +88,17 @@ function gpt_ads_submit(&$form, &$form_state) {
 }
 
 /**
+ * Submit handler for the add more targeting button.
+ */
+function gpt_form_targeting_add($form, &$form_state) {
+  $form_state['gpt_targeting_num']++;
+  $form_state['rebuild'] = TRUE;
+}
+
+/**
  * Set up the global config form.
  */
-function gpt_ads_settings_form(&$form, &$form_state) {
+function gpt_settings_form(&$form, &$form_state) {
   $form['gpt'] = array(
     '#type' => 'fieldset',
     '#collapsible' => TRUE,
@@ -150,21 +158,21 @@ function gpt_ads_settings_form(&$form, &$form_state) {
 /**
  * Ajax callback from using targeting add more button.
  */
-function gpt_ads_settings_ajax_targeting_callback($form, $form_state) {
+function gpt_settings_form_ajax_targeting_callback($form, $form_state) {
   return $form['gpt']['gpt_targeting_wrapper'];
 }
 
 /**
  * Global config form submission handler.
  */
-function gpt_ads_settings_submit(&$form, &$form_state) {
+function gpt_settings_submit(&$form, &$form_state) {
   $keys = array('network_code', 'targeted_ad_unit', 'async', 'sra', 'collapse');
   foreach ($keys as $key) {
     variable_set('gpt__' . $key, $form_state['values']['gpt'][$key]);
   }
 
   // Store targeting, iterate over elements.
-  $targeting['src'] = array();
+  $targeting = array('src' => array());
   foreach ($form_state['values']['gpt']['gpt_targeting_wrapper'] as $v) {
     // Only attempt to store the key/value pair if both key and value are set.
     if (!empty($v['key']) && !empty($v['value'])) {
@@ -173,14 +181,6 @@ function gpt_ads_settings_submit(&$form, &$form_state) {
   }
   $targeting['prep'] = gpt_prepare_targeting($targeting['src']);
   variable_set('gpt__targeting', $targeting);
-}
-
-/**
- * Submit handler for the add more targeting button.
- */
-function gpt_form_targeting_add($form, &$form_state) {
-  $form_state['gpt_targeting_num']++;
-  $form_state['rebuild'] = TRUE;
 }
 
 /**

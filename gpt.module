@@ -66,7 +66,7 @@ function gpt_form_ad_manager_settings_form_alter(&$form, &$form_state) {
   ctools_include('gpt.admin', 'gpt', FALSE);
 
   // Call the form function, used to keep the .module light weight.
-  gpt_ads_settings_form($form, $form_state);
+  gpt_settings_form($form, $form_state);
 }
 
 /**
