@@ -90,7 +90,7 @@ function gpt_load_page_options() {
     'collapse' => variable_get('gpt__collapse', 0),
     'targeting' => variable_get('gpt__targeting', array('src' => array())),
   );
-  drupal_alter('gpt_ad_page_options', $options);
+  drupal_alter('gpt_load_page_options', $options);
   return $options;
 }
 

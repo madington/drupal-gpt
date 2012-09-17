@@ -35,7 +35,7 @@
  *         containing JSON compiled from the indexed "src".
  *
  */
-function hook_gpt_ad_page_options_alter(&$options) {
+function hook_gpt_load_page_options_alter(&$options) {
   // Fetch current page item.
   $item = menu_get_item();
   // If on a node page.
