@@ -1,0 +1,19 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for GPT Entity Targeting.
+ */
+
+// TODO: Set up schema here for storage of entity targeting settings.
+
+/**
+ * Implements hook_uninstall().
+ */
+function gpt_entity_uninstall() {
+  // Remove module variables
+  $result = db_query("SELECT name FROM {variable} WHERE name LIKE 'gpt_entity__%'");
+  while ($var_name = db_result($result)) {
+    variable_del($var_name);
+  }
+}
