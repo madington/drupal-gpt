@@ -46,7 +46,7 @@ function gpt_entity_entity_load($entities, $type) {
  */
 function gpt_entity_field_attach_form($entity_type, $entity, &$form, &$form_state, $langcode) {
   // TODO: Determine if entity type/bundle should have the form on it.
-  if (false) {
+  if (user_access('gpt entity targeting')) {
     // TODO: Add targeting form elements.
     dpm($entity_type, 'entity_type');
     dpm($entity, 'entity');
@@ -109,4 +109,16 @@ function gpt_entity_module_implements_alter(&$implementations, $hook) {
     unset($implementations['gpt_entity']);
     $implementations['gpt_entity'] = $group;
   }
+}
+
+/**
+ * Implements hook_permission().
+ */
+function gpt_entity_permission() {
+  return array(
+    'gpt entity targeting' => array(
+      'title' => t('Set entity targeting'),
+      'description' => t('Allow users to set targeting values for individual entities.'),
+    ),
+  );
 }
