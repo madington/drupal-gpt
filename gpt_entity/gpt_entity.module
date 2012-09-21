@@ -87,11 +87,13 @@ function gpt_entity_gpt_load_page_options_alter(&$options) {
   foreach ($item['map'] as $k => $v) {
     // If $v is an object then it is likely to be an entity, so we act on it.
     if (is_object($v)) {
-      // TODO: Query for the item here.
-      dpm($item['map'][$k]->entity_type, 'Entity type to fetch.');
-      dpm($item['original_map'][$k], 'Entity identifier for fetching.');
-      // If fetched record found.
-      if (false) {
+      $data = db_query('SELECT data FROM {gpt_entity} WHERE entity_type=:type AND entity_id=:id', array(
+        ':type' => $item['map'][$k]->entity_type,
+        ':id' => $item['original_map'][$k],
+      ))->fetchField();
+
+      // If data exists for the entity.
+      if ($data) {
         gpt_entity_alter_page_options($options, $data);
       }
     }
