@@ -45,8 +45,10 @@ function gpt_entity_schema() {
  */
 function gpt_entity_uninstall() {
   // Remove module variables
-  $result = db_query("SELECT name FROM {variable} WHERE name LIKE 'gpt_entity__%'");
-  while ($var_name = db_result($result)) {
-    variable_del($var_name);
+  $result = db_query('SELECT name FROM {variable} WHERE name LIKE :name', array(
+    ':name' => 'gpt_entity__%',
+  ));
+  foreach ($result as $record) {
+    variable_del($record->name);
   }
 }
