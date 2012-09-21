@@ -1,6 +1,6 @@
 #gpt-targeting .inline .form-item {
   float: left;
-  margin-left: 1.5em;
+  margin-right: 1.5em;
   padding-top: 0;
 }
 #gpt-targeting .form-type-checkbox {
@@ -10,13 +10,4 @@
 .gpt-targeting-label {
   margin-bottom: 0;
   padding-bottom: 0;
-}
-
-.gpt-targeting-eval-desc {
-  padding-top: 0;
-  margin-left: 1.5em;
-}
-
-.gpt-targeting-add {
-  margin-left: 1.5em;
 }

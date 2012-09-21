@@ -278,8 +278,9 @@ function _gpt_ads_validate_size($element, &$form_state, $form) {
  */
 function _gpt_targeting_form_elements(&$form, &$form_state, $ajax_callback) {
   $form['gpt_targeting_wrapper'] = array(
-    '#prefix' => '<div id="gpt-targeting">',
+    '#prefix' => '<div id="gpt-targeting" class="fieldset-wrapper">',
     '#suffix' => '</div>',
+    '#tree' => TRUE,
   );
 
   // Determine if the user is allowed to alter/create Javascript targeting.
