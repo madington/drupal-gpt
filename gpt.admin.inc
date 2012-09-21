@@ -278,7 +278,7 @@ function _gpt_ads_validate_size($element, &$form_state, $form) {
  */
 function _gpt_targeting_form_elements(&$form, &$form_state, $ajax_callback) {
   $form['gpt_targeting_wrapper'] = array(
-    '#prefix' => '<div id="gpt-targeting" class="fieldset-wrapper">',
+    '#prefix' => '<div id="gpt-targeting">',
     '#suffix' => '</div>',
     '#tree' => TRUE,
   );
