@@ -147,12 +147,12 @@ function gpt_settings_form(&$form, &$form_state) {
   $targeting = variable_get('gpt__targeting', array('src' => array()));
   _gpt_targeting_prep($form_state, $targeting);
   // Add targeting form elements.
-  _gpt_targeting_form_elements($form['gpt'], $form_state, 'gpt_ads_settings_ajax_targeting_callback');
+  _gpt_targeting_form_elements($form['gpt'], $form_state, 'gpt_settings_form_ajax_targeting_callback');
 
   // Add CSS to make targeting pairs appear inline.
   _gpt_admin_attach_css();
 
-  $form['#submit'][] = 'gpt_ads_settings_submit';
+  $form['#submit'][] = 'gpt_settings_submit';
 }
 
 /**
