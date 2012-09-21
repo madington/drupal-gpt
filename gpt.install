@@ -10,9 +10,10 @@
  */
 function gpt_uninstall() {
   // Remove module variables
-  $result = db_query("SELECT name FROM {variable} WHERE name LIKE 'gpt__%'");
-  while ($var_name = db_result($result)) {
-    variable_del($var_name);
+  $result = db_query('SELECT name FROM {variable} WHERE name LIKE :name', array(
+    ':name' => 'gpt__%',
+  ));
+  foreach ($result as $record) {
+    variable_del($record->name);
   }
 }
-
