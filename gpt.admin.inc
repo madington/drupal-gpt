@@ -115,7 +115,6 @@ function gpt_settings_form(&$form, &$form_state) {
       '#title' => t('Default targeted ad unit'),
       '#description' => t('<p>The targeted ad unit and, for Premium publishers, the optional hierarchy behind it.</p><p>SB publishers can utilize one (1) level of hierarchy, while Premium publishers may utilize up to five (5) levels of hierarchy. Do not begin or end with a slash.</p><p>e.g. travel or travel/asia/food</p>'),
       '#default_value' => variable_get('gpt__targeted_ad_unit', ''),
-      '#required' => TRUE,
     ),
     'async' => array(
       '#type' => 'checkbox',

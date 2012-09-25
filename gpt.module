@@ -107,7 +107,7 @@ function gpt_page_build() {
 
   $options = gpt_load_page_options();
   // Ensure network code exists.
-  if (empty($options['network_code']) || empty($options['targeted_ad_unit'])) {
+  if (empty($options['network_code'])) {
     if (user_access('administer ad manager')) {
       drupal_set_message(t('Google Publisher Tag ads should be shown on this page, but <a href="!url">key configurations</a> have not been set.',
           array('!url' => url('admin/structure/ad-manager/settings'))), 'warning');
@@ -198,12 +198,18 @@ function gpt_prepare_ad($ad, $options) {
   // Allow modules to alter individual ads before definition.
   drupal_alter('gpt_ad_slot_settings', $ad, $options);
 
+  $slot = $options['network_code'];
+  if (!empty($options['targeted_ad_unit'])) {
+    $slot .= '/' . $options['targeted_ad_unit'];
+  }
+  $slot = trim($slot, '/');
+
   // Define slot.
   if ($ad['outofpage']) {
-    $string = "googletag.defineOutOfPageSlot('/{$options['network_code']}/{$options['targeted_ad_unit']}','{$ad['container']}')";
+    $string = "googletag.defineOutOfPageSlot('/$slot','{$ad['container']}')";
   }
   else {
-    $string = "googletag.defineSlot('/{$options['network_code']}/{$options['targeted_ad_unit']}',{$ad['size']},'{$ad['container']}')";
+    $string = "googletag.defineSlot('/$slot',{$ad['size']},'{$ad['container']}')";
   }
 
   $string .= '.addService(googletag.pubads())';
