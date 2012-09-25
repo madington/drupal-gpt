@@ -204,6 +204,11 @@ function gpt_prepare_ad($ad, $options) {
   }
   $slot = trim($slot, '/');
 
+  // Sanitize Javascript values to be output.
+  // Note size is sanitized in the form validation and container is created
+  // dynamically off of a machine name, no sanitization needed.
+  $slot = gpt_sanitize_js_var($slot);
+
   // Define slot.
   if ($ad['outofpage']) {
     $string = "googletag.defineOutOfPageSlot('/$slot','{$ad['container']}')";
@@ -279,6 +284,8 @@ function gpt_prepare_targeting($src) {
   $prep = array();
 
   foreach ($src as $k => $j) {
+    // Sanitize $k.
+    $k = gpt_sanitize_js_var($k);
     // Iterate
     $prep[$k] = '';
     for ($i = 0; $i < count($j); $i++) {
@@ -306,14 +313,26 @@ function gpt_prepare_targeting($src) {
  * @return string
  */
 function gpt_prepare_targeting_value($value, $eval) {
-  // If not an eval then wrap in quotes to make a string and escape quotes
-  // with a literal \'.
+  // If not an eval then sanitize and wrap in single quotes.
   if (!$eval) {
-    return '\'' . str_replace('\'', '\\\'', $value) . '\'';
+    return '\'' . gpt_sanitize_js_var($value) . '\'';
   }
 
   // Otherwise we have to assume the Javascript is valid.
   return $value;
+}
+
+/**
+ * Sanitize a Javascript string to prevent Javascript injection.
+ *
+ * @param string $var
+ *   String to sanitize.
+ *
+ * @return string
+ */
+function gpt_sanitize_js_var($var) {
+  // Replace ' with \' and \ with \\.
+  return str_replace(array('\\', '\''), array('\\\\', '\\\''), $var);
 }
 
 /**
