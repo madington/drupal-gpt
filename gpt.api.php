@@ -15,8 +15,8 @@
  *
  * @param array $options
  *   Page option associative array containing:
- *   - networkCode: The network for serving ads from, string.
- *   - targetedAdUnit: The ad unit hiearchy, string.
+ *   - network_code: The network for serving ads from, string.
+ *   - targeted_ad_unit: The ad unit hiearchy, string.
  *   - async: Use asynchrounous mode, boolean.
  *   - sra: Use single request architecture, boolean.
  *   - collapse: Collapse divs without creatives, boolean.

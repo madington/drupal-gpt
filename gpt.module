@@ -74,8 +74,8 @@ function gpt_form_ad_manager_settings_form_alter(&$form, &$form_state) {
  *
  * @return array
  *   Page option associative array containing:
- *   - networkCode: The network for serving ads from, string.
- *   - targetedAdUnit: The ad unit hiearchy, string.
+ *   - network_code: The network for serving ads from, string.
+ *   - targeted_ad_unit: The ad unit hiearchy, string.
  *   - async: Use asynchrounous mode, boolean.
  *   - sra: Use single request architecture, boolean.
  *   - collapse: Collapse divs without creatives, boolean.
@@ -83,8 +83,8 @@ function gpt_form_ad_manager_settings_form_alter(&$form, &$form_state) {
  */
 function gpt_load_page_options() {
   $options = array(
-    'networkCode' => variable_get('gpt__network_code', ''),
-    'targetedAdUnit' => variable_get('gpt__targeted_ad_unit', ''),
+    'network_code' => variable_get('gpt__network_code', ''),
+    'targeted_ad_unit' => variable_get('gpt__targeted_ad_unit', ''),
     'async' => variable_get('gpt__async', 1),
     'sra' => variable_get('gpt__sra', 1),
     'collapse' => variable_get('gpt__collapse', 0),
@@ -107,7 +107,7 @@ function gpt_page_build() {
 
   $options = gpt_load_page_options();
   // Ensure network code exists.
-  if (empty($options['networkCode']) || empty($options['targetedAdUnit'])) {
+  if (empty($options['network_code']) || empty($options['targeted_ad_unit'])) {
     if (user_access('administer ad manager')) {
       drupal_set_message(t('Google Publisher Tag ads should be shown on this page, but <a href="!url">key configurations</a> have not been set.',
           array('!url' => url('admin/structure/ad-manager/settings'))), 'warning');
@@ -188,9 +188,9 @@ function gpt_permission() {
  *   - outofpage: Whether the ad is an interstitial or not.
  * @param array $options
  *   Page level options associative array:
- *   - networkCode: The DoubleClick network code the ad should be displayed
+ *   - network_code: The DoubleClick network code the ad should be displayed
  *     through.
- *   - targetedAdUnit: The GPT hierarchy.
+ *   - targeted_ad_unit: The GPT hierarchy.
  *
  * @return string
  */
@@ -200,10 +200,10 @@ function gpt_prepare_ad($ad, $options) {
 
   // Define slot.
   if ($ad['outofpage']) {
-    $string = "googletag.defineOutOfPageSlot('/{$options['networkCode']}/{$options['targetedAdUnit']}','{$ad['container']}')";
+    $string = "googletag.defineOutOfPageSlot('/{$options['network_code']}/{$options['targeted_ad_unit']}','{$ad['container']}')";
   }
   else {
-    $string = "googletag.defineSlot('/{$options['networkCode']}/{$options['targetedAdUnit']}',{$ad['size']},'{$ad['container']}')";
+    $string = "googletag.defineSlot('/{$options['network_code']}/{$options['targeted_ad_unit']}',{$ad['size']},'{$ad['container']}')";
   }
 
   $string .= '.addService(googletag.pubads())';
