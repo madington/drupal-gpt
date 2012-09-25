@@ -17,15 +17,16 @@ function gpt_entity_form($entity_type, $entity, &$form, &$form_state, $langcode)
   // entity here.
   $form_state[$entity_type] = $entity;
 
+  // Load defaults.
+  $defaults = array();
   list($identifier) = entity_extract_ids($entity_type, $entity);
-  if (isset($entity->$identifier)) {
+  if ($identifier) {
     $defaults = gpt_entity_crud_load($entity->entity_type, $identifier);
   }
-  else {
-    $defaults = array(
-      'targeting' => array('src' => array()),
-    );
+  if (!isset($defaults['targeting']['src'])) {
+    $defaults['targeting'] = array('src' => array());
   }
+
   // Loaded for targeting helpers.
   ctools_include('gpt.admin', 'gpt', FALSE);
   _gpt_admin_attach_css();
@@ -127,6 +128,7 @@ function gpt_entity_form($entity_type, $entity, &$form, &$form_state, $langcode)
   }
 
   _gpt_targeting_prep($form_state, $defaults['targeting']);
+  // TODO: Errors on targeting form upon add more are not displaying.
   _gpt_targeting_form_elements($gpt, $form_state, 'gpt_entity_form_ajax_targeting_callback');
 
   // TODO: Remove gpt_entity_form_alter() if http://drupal.org/node/1284642 is

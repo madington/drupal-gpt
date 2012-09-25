@@ -14,9 +14,12 @@
 function gpt_entity_alter_page_options(&$original, $integrate, $override = FALSE) {
   if (isset($integrate['targeting']['src']) && !$override) {
     // Append additional targeting to $original['targeting']['src']
-    foreach ($integrate['targeting']['src'] as $key => $v) {
-      $value = array_merge($original['targeting']['src'][$key], $integrate['targeting']['src'][$key]);
-      $original['targeting']['src'][$key][] = $value;
+    foreach ($integrate['targeting']['src'] as $key => $value) {
+      // If original already contains the key then merge the arrays.
+      if (isset($original['targeting']['src'][$key])) {
+        $value = array_merge($original['targeting']['src'][$key], $integrate['targeting']['src'][$key]);
+      }
+      $original['targeting']['src'][$key] = $value;
     }
 
     // Unset $original's targeting prep, so the new values will be used.
@@ -62,7 +65,6 @@ function gpt_entity_crud_load($type, $id) {
   ))->fetchField();
 
   if ($data) {
-    dpm($data, 'loaded');
     return drupal_json_decode($data);
   }
 
