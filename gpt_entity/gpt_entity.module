@@ -7,9 +7,12 @@
  *
  * @param array $original
  * @param array $integrate
+ * @param boolean $override
+ *   Override targeting values when set to TRUE, when set to FALSE appends
+ *   additional targeting key value pairs. Defaults to FALSE.
  */
-function gpt_entity_alter_page_options(&$original, $integrate) {
-  if (isset($integrate['targeting']['src'])) {
+function gpt_entity_alter_page_options(&$original, $integrate, $override = FALSE) {
+  if (isset($integrate['targeting']['src']) && !$override) {
     // Append additional targeting to $original['targeting']['src']
     foreach ($integrate['targeting']['src'] as $key => $v) {
       $value = array_merge($original['targeting']['src'][$key], $integrate['targeting']['src'][$key]);
@@ -22,10 +25,81 @@ function gpt_entity_alter_page_options(&$original, $integrate) {
 
   // Update any other settings by overriding.
   foreach ($integrate as $k => $v) {
-    if (!empty($v)) {
-      $original[$k] = $v;
-    }
+    $original[$k] = $v;
   }
+}
+
+/**
+ * Delete the GPT entity targeting for a specified entity.
+ *
+ * @param string $type
+ *   Entity type.
+ * @param mixed $id
+ *   Entity identifier.
+ */
+function gpt_entity_crud_delete($type, $id) {
+  db_delete('gpt_entity')
+    ->condition('entity_type', $type)
+    ->condition('entity_id', $id)
+    ->execute();
+}
+
+/**
+ * Load GPT entity targeting for a specified entity.
+ *
+ * @param string $type
+ *   Entity type.
+ * @param mixed $id
+ *   Entity identifier.
+ *
+ * @return array|FALSE
+ *   Return GPT array if found, otherwise FALSE.
+ */
+function gpt_entity_crud_load($type, $id) {
+  $data = db_query('SELECT data FROM {gpt_entity} WHERE entity_type=:type AND entity_id=:id', array(
+    ':type' => $type,
+    ':id' => $id,
+  ))->fetchField();
+
+  if ($data) {
+    dpm($data, 'loaded');
+    return drupal_json_decode($data);
+  }
+
+  return FALSE;
+}
+
+/**
+ * Save GPT entity targeting.
+ *
+ * @param string $type
+ *   Entity type.
+ * @param mixed $id
+ *   Entity identifier.
+ * @param type $data
+ *   The GPT array to store.
+ */
+function gpt_entity_crud_save($type, $id, $data) {
+  $data = drupal_json_encode($data);
+
+  // Insert/Update the record.
+  db_merge('gpt_entity')
+    ->key(array('entity_type' => $type, 'entity_id' => $id))
+    ->insertFields(array(
+      'entity_type' => $type,
+      'entity_id' => $id,
+      'data' => $data,
+    ))
+    ->updateFields(array('data' => $data))
+    ->execute();
+}
+
+/**
+ * Implements hook_entity_delete().
+ */
+function gpt_entity_entity_delete($entity, $type) {
+  list($id) = entity_extract_ids($type, $entity);
+  gpt_entity_crud_delete($type, $id);
 }
 
 /**
@@ -45,36 +119,34 @@ function gpt_entity_entity_load($entities, $type) {
  * Implements hook_field_attach_form().
  */
 function gpt_entity_field_attach_form($entity_type, $entity, &$form, &$form_state, $langcode) {
-  // TODO: Determine if entity type/bundle should have the form on it.
-  if (user_access('gpt entity targeting')) {
-    // TODO: Add targeting form elements.
-    dpm($entity_type, 'entity_type');
-    dpm($entity, 'entity');
-    dpm($form, 'form');
-    dpm($form_state, 'form_state');
+  $entity_info = entity_get_info($entity_type);
+  // Confirm the entity is used as a router item (ie a page) and that the user
+  // has access before adding the targeting form.
+  if (isset($entity_info['bundle keys']['bundle']) &&
+      user_access('gpt entity targeting')) {
+    // Load form from include file, keeps .module light weight.
+    ctools_include('gpt_entity', 'gpt_entity', FALSE);
+    gpt_entity_form($entity_type, $entity, $form, $form_state, $langcode);
   }
 }
 
 /**
- * Implements hook_field_extra_fields().
+ * Implements hook_form_alter().
  */
-function gpt_entity_field_extra_fields() {
-  $extra = array();
-
-  foreach (entity_get_info() as $entity_type => $entity_info) {
-    foreach (array_keys($entity_info['bundles']) as $bundle) {
-      // TODO: Make if false instead check entities enabled for targeting.
-      if (false) {
-        $extra[$entity_type][$bundle]['form']['gpt_entity'] = array(
-          'label' => t('GPT entity targeting'),
-          'description' => t('Set targeting for Google Publisher Tag on individual entities.'),
-          'weight' => 50,
-        );
-      }
-    }
+function gpt_entity_form_alter(&$form) {
+  // TODO: Remove gpt_entity_form_alter() if http://drupal.org/node/1284642 is
+  // fixed in core.
+  if (isset($form['gpt_entity'])) {
+    $form['#submit'][] = 'gpt_entity_form_submit';
   }
+}
 
-  return $extra;
+/**
+ * Form submit callback, wrapper to give global scope to the submit handler.
+ */
+function gpt_entity_form_submit(&$form, &$form_state) {
+  ctools_include('gpt_entity', 'gpt_entity', FALSE);
+  gpt_entity_form_submit_handler($form, $form_state);
 }
 
 /**
@@ -82,20 +154,27 @@ function gpt_entity_field_extra_fields() {
  */
 function gpt_entity_gpt_load_page_options_alter(&$options) {
   $item = menu_get_item();
-  // Could use $item['page_arguments'] instead of looping, but that would not
-  // provide the argument's identifier passed to the 'load_functions'.
-  foreach ($item['map'] as $k => $v) {
-    // If $v is an object then it is likely to be an entity, so we act on it.
-    if (is_object($v)) {
-      $data = db_query('SELECT data FROM {gpt_entity} WHERE entity_type=:type AND entity_id=:id', array(
-        ':type' => $item['map'][$k]->entity_type,
-        ':id' => $item['original_map'][$k],
-      ))->fetchField();
 
-      // If data exists for the entity.
-      if ($data) {
-        gpt_entity_alter_page_options($options, $data);
-      }
+  // Iterate over loaded arguments.
+  foreach ($item['page_arguments'] as $entity) {
+    if (!isset($entity->entity_type)) {
+      continue;
+    }
+
+    $entity_info = entity_get_info($entity->entity_type);
+
+    // We can be fairly certain this is an entity for the page, to be extra
+    // secure we confirm that it is.
+    if (!isset($entity_info['bundle keys']['bundle'])) {
+      continue;
+    }
+
+    $data = gpt_entity_crud_load($entity->entity_type, $entity->$entity_info['entity keys']['id']);
+    if ($data) {
+      gpt_entity_alter_page_options($options, $data);
+      // Break out of the foreach just to prevent any unique edge cases in
+      // which there could be two entities in a menu item.
+      break;
     }
   }
 }
