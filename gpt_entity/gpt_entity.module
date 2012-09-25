@@ -1,38 +1,6 @@
 <?php
 
 /**
- * Alter GPT page options by adding in override values.
- *
- * TODO: This should probably go into gpt.module
- *
- * @param array $original
- * @param array $integrate
- * @param boolean $override
- *   Override targeting values when set to TRUE, when set to FALSE appends
- *   additional targeting key value pairs. Defaults to FALSE.
- */
-function gpt_entity_alter_page_options(&$original, $integrate, $override = FALSE) {
-  if (isset($integrate['targeting']['src']) && !$override) {
-    // Append additional targeting to $original['targeting']['src']
-    foreach ($integrate['targeting']['src'] as $key => $value) {
-      // If original already contains the key then merge the arrays.
-      if (isset($original['targeting']['src'][$key])) {
-        $value = array_merge($original['targeting']['src'][$key], $integrate['targeting']['src'][$key]);
-      }
-      $original['targeting']['src'][$key] = $value;
-    }
-
-    // Unset $original's targeting prep, so the new values will be used.
-    unset($integrate['targeting'], $original['targeting']['prep']);
-  }
-
-  // Update any other settings by overriding.
-  foreach ($integrate as $k => $v) {
-    $original[$k] = $v;
-  }
-}
-
-/**
  * Delete the GPT entity targeting for a specified entity.
  *
  * @param string $type
@@ -177,7 +145,7 @@ function gpt_entity_gpt_load_page_options_alter(&$options) {
 
     $data = gpt_entity_crud_load($entity->entity_type, $entity->$entity_info['entity keys']['id']);
     if ($data) {
-      gpt_entity_alter_page_options($options, $data);
+      gpt_alter_page_options($options, $data);
       // Break out of the foreach just to prevent any unique edge cases in
       // which there could be two entities in a menu item.
       break;

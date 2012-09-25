@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Implements hook_ad_manager_providers().
  */
@@ -54,6 +55,41 @@ function gpt_ads(&$form, &$form_state) {
 
   // Call the form function, used to keep the .module light weight.
   gpt_ads_form($form, $form_state);
+}
+
+/**
+ * Alter GPT page options by adding and overriding values.
+ *
+ * This function is intended as a helper for implementing modules.
+ *
+ * @param array $original
+ * @param array $integrate
+ *   Any keys defined in this array will override the values in $original; the
+ *   exception being the targeting key, which will attempt to append values from
+ *   targeting['src'], unless the targeting['prep'] key has been defined.
+ */
+function gpt_alter_page_options(&$original, $integrate) {
+  // If $integrate's targeting src is set and targeting prep has not been
+  // generated then append targeting key-value pairs.
+  if (isset($integrate['targeting']['src']) &&
+      !isset($integrate['targeting']['prep'])) {
+    // Append additional targeting to $original['targeting']['src']
+    foreach ($integrate['targeting']['src'] as $key => $value) {
+      // If original already contains the key then merge the arrays.
+      if (isset($original['targeting']['src'][$key])) {
+        $value = array_merge($original['targeting']['src'][$key], $integrate['targeting']['src'][$key]);
+      }
+      $original['targeting']['src'][$key] = $value;
+    }
+
+    // Unset $original's targeting prep, so the new values will be used.
+    unset($integrate['targeting'], $original['targeting']['prep']);
+  }
+
+  // Update any other settings by overriding.
+  foreach ($integrate as $k => $v) {
+    $original[$k] = $v;
+  }
 }
 
 /**
