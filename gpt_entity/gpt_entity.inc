@@ -78,12 +78,16 @@ function gpt_entity_form($entity_type, $entity, &$form, &$form_state, $langcode)
         '#title' => t('Collapse empty divs'),
         '#description' => t('Collapse empty div elements when there is no creative to display.'),
       ),
-      'gpt_targeting_label' => array(
-        '#type' => 'item',
+      'gpt_targeting_override' => array(
+        '#type' => 'radios',
         '#title' => t('Page-level customized targeting'),
-        '#description' => t('Provide key-value pairs for slot-level customized targeting. Multiple values may be associated with one key.'),
+        '#description' => t('<p>Provide key-value pairs for page-level customized targeting. Multiple values may be associated with one key.</p><p>Choosing override will override any page-level customized targeting set elsewhere for this page.</p>'),
+        '#options' => array(
+          0 => t('Append'),
+          1 => t('Override'),
+        ),
+        '#default_value' => isset($defaults['targeting']['prep']) ? 1 : 0,
       ),
-      // TODO Add radios for append vs override
     ),
   );
   // Attach form as a vertical tab, if the form supports them.
@@ -164,7 +168,12 @@ function gpt_entity_form_submit_handler(&$form, &$form_state) {
       $data['targeting']['src'][$v['key']][] = array('value' => $v['value'], 'eval' => $v['eval']);
     }
   }
-  if (empty($data['targeting']['src'])) {
+  // If targeting override was selected then prepare values.
+  if ($form_state['values']['gpt_entity_wrapper']['gpt_targeting_override']) {
+    $data['targeting']['prep'] = gpt_prepare_targeting($data['targeting']['src']);
+  }
+  // Otherwise if targeting['src'] is empty.
+  elseif (empty($data['targeting']['src'])) {
     unset($data['targeting']);
   }
 
