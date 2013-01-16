@@ -36,13 +36,13 @@
  *
  */
 function hook_gpt_load_page_options_alter(&$options) {
-  // Fetch current page item.
-  $item = menu_get_item();
+  // Attempt to fetch current page node, if not node page then NULL.
+  $node = menu_get_object();
   // If on a node page.
-  if ($item['map'][0] == 'node' && isset($item['map'][1]->type)) {
+  if ($node) {
     // Set targeting key value pair of: type to $node->type.
     $options['targeting']['src']['type'][] = array(
-      'value' => $item['map'][1]->type,
+      'value' => $node->type,
       'eval' => FALSE,
     );
     // Unset prep key as src has been modified and prep should be rebuilt
