@@ -9,9 +9,7 @@
  *   Previously set settings for the form.
  */
 function gpt_ad_slot_form($form, &$form_state, $settings) {
-  dpm($settings);
   $defaults = _gpt_ad_slot_form_defaults($settings, $form_state);
-  dpm($defaults, 'defaults');
   _gpt_admin_attach_css();
   $form['#tree'] = TRUE;
   // Setting #submit seems to do nothing, so we have to force pass through our
@@ -216,7 +214,6 @@ function gpt_ad_slot_form_submit(&$form, &$form_state) {
   }
 
   $form_state['prepared_values'] = $values;
-  dpm($values, 'prepared values write');
 }
 
 /**
@@ -253,7 +250,6 @@ function gpt_ad_slot_form_targeting_value_add($form, &$form_state) {
 function gpt_ads_form(&$form, &$form_state) {
   $slot_form_values = isset($form_state['item']->settings['gpt_ads']) ?
       $form_state['item']->settings['gpt_ads'] : array();
-  dpm($slot_form_values, 'slot form values');
   $form['slot_form'] = array(
     '#type' => 'subform',
     '#subform_id' => 'gpt_ad_slot_form',
@@ -284,7 +280,6 @@ function gpt_ads_submit(&$form, &$form_state) {
 
   // Now we use our values to do what we need:
   $values = $form_state['temporary']['subform']['subform-slot_form']['prepared_values'];
-  dpm($values, 'prepared values read');
   foreach ($values as $key => $value) {
     $settings[$key] = $value;
   }
