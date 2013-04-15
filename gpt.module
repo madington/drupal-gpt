@@ -30,31 +30,39 @@ function gpt_ads(&$form, &$form_state) {
 /**
  * Alter GPT page options by adding and overriding values.
  *
- * This function is intended as a helper for implementing modules.
- * @TODO redo this, src and prep are no longer used...
- *
  * @param array $original
  * @param array $integrate
  *   Any keys defined in this array will override the values in $original; the
- *   exception being the targeting key, which will attempt to append values from
- *   targeting['src'], unless the targeting['prep'] key has been defined.
+ *   exception being the targeting key, which will either attempt to append or
+ *   override values for each key.
  */
 function gpt_alter_page_options(&$original, $integrate) {
-  // If $integrate's targeting src is set and targeting prep has not been
-  // generated then append targeting key-value pairs.
-  if (isset($integrate['targeting']['src']) &&
-      !isset($integrate['targeting']['prep'])) {
-    // Append additional targeting to $original['targeting']['src']
-    foreach ($integrate['targeting']['src'] as $key => $value) {
-      // If original already contains the key then merge the arrays.
-      if (isset($original['targeting']['src'][$key])) {
-        $value = array_merge($original['targeting']['src'][$key], $integrate['targeting']['src'][$key]);
-      }
-      $original['targeting']['src'][$key] = $value;
+  if (isset($integrate['targeting'])) {
+    $key_index = array();
+    foreach ($original['targeting'] as $k => $v) {
+      $key_index[$v['key']] = $k;
     }
 
-    // Unset $original's targeting prep, so the new values will be used.
-    unset($integrate['targeting'], $original['targeting']['prep']);
+    foreach ($integrate['targeting'] as $v) {
+      if (isset($key_index[$v['key']])) {
+        // Override
+        if ($v['method'] == '1') {
+          $original['targeting'][$key_index[$v['key']]] = $v;
+        }
+        // Append
+        else {
+          foreach ($v['values'] as $w) {
+            $original['targeting'][$key_index[$v['key']]]['values'][] = $w;
+          }
+        }
+      }
+      // Append
+      else {
+        $original['targeting'][] = $v;
+      }
+    }
+    // Unset $integrate targeting, so it override below.
+    unset($integrate['targeting']);
   }
 
   // Update any other settings by overriding.
@@ -122,8 +130,8 @@ function gpt_load_page_options() {
  * Implements hook_page_build().
  */
 function gpt_page_build() {
-return;
   $options = gpt_load_page_options();
+return;
 
   // Ensure required options are set.
   if (empty($options['network_code']) || empty($options['targeted_ad_unit'])) {
