@@ -323,7 +323,7 @@ function gpt_global_settings_form_submit(&$form, &$form_state) {
 /**
  * Set up the global config form.
  */
-function gpt_settings_form($form, &$form_state, $settings, $global) {
+function gpt_settings_form($form, &$form_state, $settings, $global = FALSE) {
   $defaults = _gpt_settings_form_defaults($settings, $form_state, $global);
   $form_state['global_settings'] = $global;
   _gpt_admin_attach_css();
@@ -399,7 +399,7 @@ function gpt_settings_form($form, &$form_state, $settings, $global) {
     '#type' => 'checkbox',
     '#title' => t('Single Request Architecture (SRA)'),
     '#description' => t('SRA reduces ad calls to one single request, improving performance of page loads, and also allows guarantee of roadblocks. However ads will not begin loading until all other assets on the page have loaded, and it also prevents new ads being loaded on the page via Javascript or Ajax.'),
-    '#default_value' => variable_get('gpt__sra', 1),
+    '#default_value' => $defaults['sra'],
     '#states' => $global ? array() : array(
       'visible' => array(
         'input[id="edit-sra-override"]' => array('checked' => TRUE),
@@ -418,7 +418,7 @@ function gpt_settings_form($form, &$form_state, $settings, $global) {
     '#type' => 'checkbox',
     '#title' => t('Collapse empty divs'),
     '#description' => t('Collapse empty div elements when there is no creative to display.'),
-    '#default_value' => variable_get('gpt__collapse', 0),
+    '#default_value' => $defaults['collapse'],
     '#states' => $global ? array() : array(
       'visible' => array(
         'input[id="edit-collapse-override"]' => array('checked' => TRUE),
@@ -461,6 +461,7 @@ function gpt_settings_form($form, &$form_state, $settings, $global) {
           0 => t('Append'),
           1 => t('Override'),
         ),
+        '#default_value' => $defaults['targeting'][$i]['method'],
       );
     }
     for ($j = 0; $j < $form_state['num_targeting_values_' . $i]; $j++) {
@@ -533,7 +534,7 @@ function gpt_settings_form_submit(&$form, &$form_state) {
   foreach ($keys as $key) {
     if (!$form_state['global_settings']) {
       // Pass back null if not overridden.
-      if ($form_state['values'][$key . '_overridden']) {
+      if ($form_state['values'][$key . '_override']) {
         $values[$key] = $form_state['values'][$key];
       }
       else {
@@ -667,8 +668,10 @@ function gpt_validate_targeting($element, &$form_state, $form) {
   // $keys stores the keys submitted. Used to flag duplicate keys.
   $keys = &drupal_static(__FUNCTION__);
   if (!isset($keys)) {
-    foreach ($form_state['values']['targeting_wrapper'] as $targeting) {
-      $keys[] = trim($targeting['key']);
+    foreach ($form_state['values']['targeting_wrapper'] as $k => $targeting) {
+      if ($k !== 'targeting_add') {
+        $keys[] = trim($targeting['key']);
+      }
     }
   }
 
@@ -873,10 +876,52 @@ function _gpt_settings_form_defaults(&$s, &$form_state, $global) {
     foreach ($keys as $key) {
       $d[$key] = $form_state['values'][$key];
     }
+    // Targeting values
+    $d['targeting'] = array();
+    for ($i = 0; $i < $form_state['num_targeting_keys']; $i++) {
+      $value = isset($v['targeting_wrapper'][$i]) ? $v['targeting_wrapper'][$i] : FALSE;
+      $d['targeting'][$i] = array(
+        'key' => $value !== FALSE ? $value['key'] : '',
+        'values' => array(),
+      );
+      if (!$global) {
+        $d['targeting'][$i]['method'] = $value !== FALSE ? $value['method'] : 0;
+      }
+      for ($j = 0; $j < $form_state['num_targeting_values_' . $i]; $j++) {
+        $value = isset($v['targeting_wrapper'][$i]['values'][$j]) ? $v['targeting_wrapper'][$i]['values'][$j] : FALSE;
+        $d['targeting'][$i]['values'][$j] = array(
+          'value' => $value !== FALSE ? $value['value'] : '',
+          'eval' => $value !== FALSE ? $value['eval'] : 0,
+        );
+      }
+    }
   }
   // Else, if available, build defaults from stored settings.
   elseif (!empty($s)) {
-    $d['targeting'] = $s['targeting'];
+    foreach (array_keys($d) as $key) {
+      if (isset($s[$key])) {
+        $d[$key] = $s[$key];
+        $d[$key . '_override'] = 1;
+      }
+    }
+
+    if (isset($s['targeting'])) {
+      $d['targeting'] = $s['targeting'];
+    }
+    else {
+      $d['targeting'] = array(
+        array(
+          'key' => '',
+          'method' => 0,
+          'values' => array(
+            array(
+              'value' => '',
+              'eval' => 0,
+            ),
+          ),
+        ),
+      );
+    }
   }
   // Elseif this is for a global config, load targeting from variable_get().
   elseif ($global) {
@@ -897,7 +942,7 @@ function _gpt_settings_form_defaults(&$s, &$form_state, $global) {
     $d['targeting'] = array(
       array(
         'key' => '',
-        'mode' => 'append',
+        'method' => 0,
         'values' => array(
           array(
             'value' => '',
