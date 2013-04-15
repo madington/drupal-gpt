@@ -81,7 +81,7 @@ function gpt_ad_slot_form($form, &$form_state, $settings) {
   $form['targeting_wrapper'] = array(
     '#type' => 'fieldset',
     '#title' => t('Slot-level customized targeting'),
-    '#description' => t('Provide key-value pairs for slot-level customized targeting.'),
+    '#description' => t('Provide key-value pairs for slot-level customized targeting. Multiple values may be associated with one key.'),
     '#prefix' => '<div id="gpt-targeting">',
     '#suffix' => '</div>',
   );
@@ -286,90 +286,314 @@ function gpt_ads_submit(&$form, &$form_state) {
 }
 
 /**
- * Set up the global config form.
+ * Attach our settings form in global mode to the ad manager settings form.
  */
-function gpt_settings_form(&$form, &$form_state) {
+function gpt_global_settings_form(&$form, &$form_state) {
   $form['gpt'] = array(
     '#type' => 'fieldset',
     '#collapsible' => TRUE,
     '#title' => t('Google Publisher Tags'),
-    'network_code' => array(
-      '#type' => 'textfield',
-      '#title' => t('Network code'),
-      '#description' => t('<p>The network to use for inventory, can be found in the Admin tab of DFP. Likely a 4 digit number for Premium publishers and a longer number for SB publishers.</p><p>e.g. 1234</p>'),
-      '#default_value' => variable_get('gpt__network_code', ''),
-      '#required' => TRUE,
-    ),
-    'targeted_ad_unit' => array(
-      '#type' => 'textfield',
-      '#title' => t('Default targeted ad unit'),
-      '#description' => t('<p>The targeted ad unit and, for Premium publishers, the optional hierarchy behind it.</p><p>SB publishers can utilize one (1) level of hierarchy, while Premium publishers may utilize up to five (5) levels of hierarchy. Do not begin or end with a slash.</p><p>e.g. travel or travel/asia/food</p>'),
-      '#default_value' => variable_get('gpt__targeted_ad_unit', ''),
-    ),
-    'async' => array(
-      '#type' => 'checkbox',
-      '#title' => t('Asynchronous'),
-      '#description' => t('Asynchronous causes non-blocking loading of creatives, option to use Single Request Architecture, and the ability to refresh ads. Some expanding creatives may not expand, if they were not developed as Friendly iFrames.'),
-      '#default_value' => variable_get('gpt__async', 1),
-    ),
-    'sra' => array(
-      '#type' => 'checkbox',
-      '#title' => t('Single Request Architecture (SRA)'),
-      '#description' => t('SRA reduces ad calls to one single request, improving performance of page loads, and also allows guarantee of roadblocks.'),
-      '#default_value' => variable_get('gpt__sra', 1),
-    ),
-    'collapse' => array(
-      '#type' => 'checkbox',
-      '#title' => t('Collapse empty divs'),
-      '#description' => t('Collapse empty div elements when there is no creative to display.'),
-      '#default_value' => variable_get('gpt__collapse', 0),
-    ),
-    'gpt_targeting_label' => array(
-      '#type' => 'item',
-      '#title' => t('Page-level customized targeting'),
-      '#description' => t('Provide key-value pairs to apply to all ad slots on all pages. Multiple values may be associated with one key.'),
-      '#attributes' => array('class' => array('gpt-targeting-label')),
-    ),
   );
-
-  // Prepare targeting values needed.
-  $targeting = variable_get('gpt__targeting', array('src' => array()));
-  _gpt_targeting_prep($form_state, $targeting);
-  // Add targeting form elements.
-  _gpt_targeting_form_elements($form['gpt'], $form_state, 'gpt_settings_form_ajax_targeting_callback');
-
-  // Add CSS to make targeting pairs appear inline.
-  _gpt_admin_attach_css();
-
-  $form['#submit'][] = 'gpt_settings_submit';
+  $form['gpt']['gpt_settings'] = array(
+    '#type' => 'subform',
+    '#subform_id' => 'gpt_settings_form',
+    '#subform_file' => array('module' => 'gpt', 'name' => 'gpt.admin.inc'),
+    // We don't need to pass arguments as the subform will populate from global.
+    '#subform_arguments' => array(array(), TRUE),
+    '#subform_default_triggering_element' => array('submit'),
+    '#required' => TRUE,
+  );
+  // Enable error validation.
+  $form['submit']['#submit'][] = 'subform_submit_all';
+  $form['submit']['#submit'][] = 'gpt_global_settings_form_submit';
 }
 
 /**
- * Ajax callback from using targeting add more button.
+ * Global settings for submit handler.
  */
-function gpt_settings_form_ajax_targeting_callback($form, $form_state) {
-  return $form['gpt']['gpt_targeting_wrapper'];
+function gpt_global_settings_form_submit(&$form, &$form_state) {
+  $values = $form_state['temporary']['subform']['subform-gpt-gpt_settings']['prepared_values'];
+  $keys = array('network_code', 'targeted_ad_unit', 'async', 'sra', 'collapse', 'targeting');
+
+  foreach ($keys as $key) {
+    variable_set('gpt__' . $key, $values[$key]);
+  }
+}
+
+/**
+ * Set up the global config form.
+ */
+function gpt_settings_form($form, &$form_state, $settings, $global) {
+  $defaults = _gpt_settings_form_defaults($settings, $form_state, $global);
+  $form_state['global_settings'] = $global;
+  _gpt_admin_attach_css();
+  $form['#tree'] = TRUE;
+  // $form['#submit'][] = 'gpt_settings_form_submit';
+
+  if (!$global) {
+    $form['network_code_override'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Override network code'),
+      '#default_value' => $defaults['network_code_override'],
+    );
+  }
+  $form['network_code'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Network code'),
+    '#description' => t('<p>The network to use for inventory, can be found in the Admin tab of DFP. Likely a 4 digit number for Premium publishers and a longer number for SB publishers.</p><p>e.g. 1234</p>'),
+    '#default_value' => $defaults['network_code'],
+    '#required' => $global,
+    '#states' => $global ? array() : array(
+      'visible' => array(
+        'input[id="edit-network-code-override"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  if (!$global) {
+    $form['targeted_ad_unit_override'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Override targeted ad unit'),
+      '#default_value' => $defaults['targeted_ad_unit_override'],
+    );
+  }
+  $form['targeted_ad_unit'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Default targeted ad unit'),
+    '#description' => t('<p>The targeted ad unit and, for Premium publishers, the optional hierarchy behind it.</p><p>SB publishers can utilize one (1) level of hierarchy, while Premium publishers may utilize up to five (5) levels of hierarchy. Do not begin or end with a slash.</p><p>e.g. travel or travel/asia/food</p>'),
+    '#default_value' => $defaults['targeted_ad_unit'],
+    '#states' => $global ? array() : array(
+      'visible' => array(
+        'input[id="edit-targeted-ad-unit-override"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  if (!$global) {
+    $form['async_override'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Override asynchronous'),
+      '#default_value' => $defaults['async_override'],
+    );
+  }
+  $form['async'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Asynchronous'),
+    '#description' => t('Asynchronous causes non-blocking loading of creatives, option to use Single Request Architecture, and the ability to refresh ads. Some expanding creatives may not expand, if they were not developed as Friendly iFrames.'),
+    '#default_value' => $defaults['async'],
+    '#states' => $global ? array() : array(
+      'visible' => array(
+        'input[id="edit-async-override"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  if (!$global) {
+    $form['sra_override'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Override Single Request Architecture (SRA)'),
+      '#default_value' => $defaults['sra_override'],
+    );
+  }
+  $form['sra'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Single Request Architecture (SRA)'),
+    '#description' => t('SRA reduces ad calls to one single request, improving performance of page loads, and also allows guarantee of roadblocks. However ads will not begin loading until all other assets on the page have loaded, and it also prevents new ads being loaded on the page via Javascript or Ajax.'),
+    '#default_value' => variable_get('gpt__sra', 1),
+    '#states' => $global ? array() : array(
+      'visible' => array(
+        'input[id="edit-sra-override"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  if (!$global) {
+    $form['collapse_override'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Override collapse empty divs'),
+      '#default_value' => $defaults['collapse_override'],
+    );
+  }
+  $form['collapse'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Collapse empty divs'),
+    '#description' => t('Collapse empty div elements when there is no creative to display.'),
+    '#default_value' => variable_get('gpt__collapse', 0),
+    '#states' => $global ? array() : array(
+      'visible' => array(
+        'input[id="edit-collapse-override"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+
+  $form['targeting_wrapper'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Page-level customized targeting'),
+    '#description' => t('<p>Provide key-value pairs for page-level customized targeting. Multiple values may be associated with one key.</p>'),
+    '#prefix' => '<div id="gpt-targeting">',
+    '#suffix' => '</div>',
+  );
+  if (!$global) {
+    $form['targeting_wrapper']['#description'] .= t('<p>Choosing override will override any page-level customized targeting set elsewhere for the overridden key.</p>');
+  }
+  // Determine if the user is allowed to alter/create Javascript targeting.
+  $js_perm = user_access('gpt set javascript');
+  for ($i = 0; $i < $form_state['num_targeting_keys']; $i++) {
+    $form['targeting_wrapper'][] = array(
+      '#prefix' => '<div class="key clearfix">',
+      '#suffix' => '</div>',
+      '#element_validate' => array('gpt_element_validate_handler'),
+      '#gpt_validate_handler' => 'gpt_validate_targeting',
+    );
+    $form['targeting_wrapper'][$i]['key'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Key'),
+      '#size' => 15,
+      '#default_value' => $defaults['targeting'][$i]['key'],
+    );
+    if (!$global) {
+      $form['targeting_wrapper'][$i]['method'] = array(
+        '#type' => 'radios',
+        '#title' => t('Method'),
+        '#prefix' => '<div class="row inline clearfix">',
+        '#suffix' => '</div>',
+        '#options' => array(
+          0 => t('Append'),
+          1 => t('Override'),
+        ),
+      );
+    }
+    for ($j = 0; $j < $form_state['num_targeting_values_' . $i]; $j++) {
+      $value_wrapper =& $form['targeting_wrapper'][$i]['values'][$j];
+      $value_wrapper = array(
+        '#prefix' => '<div class="row">',
+        '#suffix' => '</div>',
+      );
+      $value_wrapper['value'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Value'),
+        '#size' => 25,
+        '#default_value' => $defaults['targeting'][$i]['values'][$j]['value'],
+        '#disabled' => !$js_perm && $defaults['targeting'][$i]['values'][$j]['eval'] ? TRUE : FALSE,
+      );
+      $value_wrapper['eval'] = array(
+        '#type' => 'checkbox',
+        '#title' => t('Value is Javascript'),
+        '#disabled' => !$js_perm,
+        '#default_value' => $defaults['targeting'][$i]['values'][$j]['eval'],
+      );
+    }
+    // Build add button.
+    $form['targeting_wrapper'][$i]['add'] = array(
+      '#type' => 'submit',
+      '#value' => t('Add value'),
+      // Without a unique #name value our form will not be able to distinguish
+      // which add value button was clicked.
+      '#name' => 'add-value-' . $i,
+      '#submit' => array('gpt_submit_handler'),
+      '#gpt_submit_handler' => 'gpt_settings_form_targeting_value_add',
+      '#prefix' => '<div class="row"><div>',
+      '#suffix' => '</div></div>',
+      '#ajax' => array(
+        'callback' => 'gpt_settings_form_targeting_ajax_callback',
+        'wrapper' => 'gpt-targeting',
+      ),
+    );
+  }
+  // Build add button.
+  $form['targeting_wrapper']['targeting_add'] = array(
+    '#type' => 'submit',
+    '#value' => t('Add key'),
+    '#submit' => array('gpt_submit_handler'),
+    '#gpt_submit_handler' => 'gpt_settings_form_targeting_key_add',
+    '#attributes' => array('class' => array('gpt-targeting-add')),
+    '#ajax' => array(
+      'callback' => 'gpt_settings_form_targeting_ajax_callback',
+      'wrapper' => 'gpt-targeting',
+    ),
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Submit'),
+    '#submit' => array('gpt_settings_form_submit'),
+    '#access' => FALSE,
+  );
+
+  return $form;
 }
 
 /**
  * Global config form submission handler.
  */
-function gpt_settings_submit(&$form, &$form_state) {
+function gpt_settings_form_submit(&$form, &$form_state) {
+  $values = array();
   $keys = array('network_code', 'targeted_ad_unit', 'async', 'sra', 'collapse');
-  foreach ($keys as $key) {
-    variable_set('gpt__' . $key, $form_state['values']['gpt'][$key]);
-  }
 
-  // Store targeting, iterate over elements.
-  $targeting = array('src' => array());
-  foreach ($form_state['values']['gpt']['gpt_targeting_wrapper'] as $v) {
-    // Only attempt to store the key/value pair if both key and value are set.
-    if (!empty($v['key']) && !empty($v['value'])) {
-      $targeting['src'][$v['key']][] = array('value' => $v['value'], 'eval' => $v['eval']);
+  foreach ($keys as $key) {
+    if (!$form_state['global_settings']) {
+      // Pass back null if not overridden.
+      if ($form_state['values'][$key . '_overridden']) {
+        $values[$key] = $form_state['values'][$key];
+      }
+      else {
+        $values[$key] = NULL;
+      }
+    }
+    else {
+      $values[$key] = $form_state['values'][$key];
     }
   }
-  $targeting['prep'] = gpt_prepare_targeting($targeting['src']);
-  variable_set('gpt__targeting', $targeting);
+
+  // Targeting
+  $values['targeting'] = NULL;
+  for ($i = 0; $i < $form_state['num_targeting_keys']; $i++) {
+    if (strlen($form_state['values']['targeting_wrapper'][$i]['key'])) {
+      $key = array(
+        'key' => $form_state['values']['targeting_wrapper'][$i]['key'],
+      );
+      if (!$form_state['global_settings']) {
+        $key['method'] = $form_state['values']['targeting_wrapper'][$i]['method'];
+      }
+      for ($j = 0; $j < $form_state['num_targeting_values_' . $i]; $j++) {
+        if (strlen($form_state['values']['targeting_wrapper'][$i]['values'][$j]['value'])) {
+          $key['values'][] = array(
+            'value' => $form_state['values']['targeting_wrapper'][$i]['values'][$j]['value'],
+            'eval' => $form_state['values']['targeting_wrapper'][$i]['values'][$j]['eval'],
+          );
+        }
+      }
+      $values['targeting'][] = $key;
+    }
+  }
+
+  $form_state['prepared_values'] = $values;
+}
+
+/**
+ * Ajax callback to return the targeting wrapper.
+ */
+function gpt_settings_form_targeting_ajax_callback($form, $form_state) {
+  return $form['targeting_wrapper'];
+}
+
+/**
+ * Submit handler for the targeting add key button.
+ */
+function gpt_settings_form_targeting_key_add($form, &$form_state) {
+  // Add a value for the new key.
+  $form_state['num_targeting_values_' . $form_state['num_targeting_keys']] = 1;
+  // Add the new key.
+  $form_state['num_targeting_keys']++;
+  $form_state['rebuild'] = TRUE;
+}
+
+/**
+ * Submit handler for the targeting add value button.
+ */
+function gpt_settings_form_targeting_value_add($form, &$form_state) {
+  $form_state['num_targeting_values_' . $form_state['triggering_element']['#parents'][1]]++;
+  $form_state['rebuild'] = TRUE;
 }
 
 /**
@@ -621,4 +845,76 @@ function _gpt_ads_size_to_friendly($sizes = NULL) {
 
     return $sizes[0] . 'x' . $sizes[1];
   }
+}
+
+/**
+ * Prepare default values for settings form.
+ */
+function _gpt_settings_form_defaults(&$s, &$form_state, $global) {
+  // Initialize data structure.
+  $d = array(
+    'network_code' => variable_get('gpt__network_code', ''),
+    'targeted_ad_unit' => variable_get('gpt__targeted_ad_unit', ''),
+    'async' => variable_get('gpt__async', 1),
+    'sra' => variable_get('gpt__sra', 0),
+    'collapse' => variable_get('gpt__collapse', 0),
+  );
+
+  if (!$global) {
+    $keys = array_keys($d);
+    foreach ($keys as $key) {
+      $d[$key . '_override'] = 0;
+    }
+  }
+
+  // Build defaults from inserted values.
+  if (isset($form_state['values'])) {
+    $keys = array_keys($d);
+    foreach ($keys as $key) {
+      $d[$key] = $form_state['values'][$key];
+    }
+  }
+  // Else, if available, build defaults from stored settings.
+  elseif (!empty($s)) {
+    $d['targeting'] = $s['targeting'];
+  }
+  // Elseif this is for a global config, load targeting from variable_get().
+  elseif ($global) {
+    $d['targeting'] = variable_get('gpt__targeting', array(
+      array(
+        'key' => '',
+        'values' => array(
+          array(
+            'value' => '',
+            'eval' => 0,
+          ),
+        ),
+      ),
+    ));
+  }
+  // Else build basic targeting structure.
+  else {
+    $d['targeting'] = array(
+      array(
+        'key' => '',
+        'mode' => 'append',
+        'values' => array(
+          array(
+            'value' => '',
+            'eval' => 0,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Determine targeting key and value indexes if not yet set.
+  if (!isset($form_state['num_targeting_keys'])) {
+    for ($i = 0; $i < count($d['targeting']); $i++) {
+      $form_state['num_targeting_values_' . $i] = count($d['targeting'][$i]['values']) ? count($d['targeting'][$i]['values']) : 1;
+    }
+    $form_state['num_targeting_keys'] = $i;
+  }
+
+  return $d;
 }

@@ -3,6 +3,10 @@
   margin-right: 1.5em;
   padding-top: 0;
 }
+#gpt-targeting .inline .form-item,
+#gpt-targeting .inline .form-radios {
+  display: inline;
+}
 
 #gpt-targeting label {
   display: inline;

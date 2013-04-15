@@ -84,7 +84,7 @@ function gpt_element_validate_handler($element, &$form_state, $form) {
 function gpt_form_ad_manager_settings_form_alter(&$form, &$form_state) {
   // Load in logic that is needed for the settings form.
   ctools_include('gpt.admin', 'gpt', FALSE);
-  gpt_settings_form($form, $form_state);
+  gpt_global_settings_form($form, $form_state);
 }
 
 /**
@@ -107,7 +107,7 @@ function gpt_load_page_options() {
       'network_code' => variable_get('gpt__network_code', ''),
       'targeted_ad_unit' => variable_get('gpt__targeted_ad_unit', ''),
       'async' => variable_get('gpt__async', 1),
-      'sra' => variable_get('gpt__sra', 1),
+      'sra' => variable_get('gpt__sra', 0),
       'collapse' => variable_get('gpt__collapse', 0),
       'refresh' => variable_get('gpt__refresh', 0),
       'targeting' => variable_get('gpt__targeting', array()),
