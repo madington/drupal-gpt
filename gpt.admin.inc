@@ -1,67 +1,269 @@
 <?php
 
 /**
- * Helper function providing the ad provider form.
+ * Form function; builds GPT ad slot form.
+ *
+ * @param $form
+ * @param $form_state
+ * @param $values
+ *   Previously set settings for the form.
  */
-function gpt_ads_form(&$form, &$form_state) {
-  $settings =& $form_state['item']->settings['gpt_ads'];
-  $outofpage = _gpt_ads_is_outofpage($form_state, $settings);
+function gpt_ad_slot_form($form, &$form_state, $settings) {
+  dpm($settings);
+  $defaults = _gpt_ad_slot_form_defaults($settings, $form_state);
+  dpm($defaults, 'defaults');
+  _gpt_admin_attach_css();
+  $form['#tree'] = TRUE;
+  // Setting #submit seems to do nothing, so we have to force pass through our
+  // subform submit handler in settings form.
+  // $form['#submit'] = array('gpt_ad_slot_form_submit');
 
-  // Create form here, for values use $settings[$key]
-  $form['gpt_ads_size'] = array(
-    '#type' => 'textfield',
+  $form['size_wrapper'] = array(
+    '#type' => 'fieldset',
     '#title' => t('Ad slot creative size'),
-    '#description' => t('<p>Enter <em>width</em> x <em>height</em>, separate multiple sizes with a comma.</p><p>Example: 300x600,300x250</p>'),
-    '#default_value' => !$outofpage && isset($settings['size']) ? _gpt_ads_size_to_friendly($settings['size']) : '',
-    '#disabled' => $outofpage,
-    '#required' => $outofpage ? FALSE : TRUE,
-    '#element_validate' => array('gpt_validate_size'),
-    '#prefix' => '<div id="gpt-ads-size">',
+    '#description' => $form_state['num_breakpoints'] === 1
+        ? t('Enter <em>width</em> x <em>height</em>, separate multiple sizes with a comma.<br />Example: 300x600,300x250.</p>')
+        : t('<p>In the <em>breakpoint</em> field, supply the browser width that the ad slot should use the corresponding size for, starting at 0.<br />Example: Breakpoint of 0 and 728 would display one size from 0-727 and another size for 728 and beyond.</p>' . '<p>In the <em>size</em> field, enter <em>width</em> x <em>height</em>, separate multiple sizes with a comma. Leave blank to not supply an ad at that breakpoint.<br />Example: 300x600,300x250.</p>'),
+    '#prefix' => '<div id="gpt-size">',
     '#suffix' => '</div>',
+    '#states' => array(
+      'visible' => array(
+        'input[id="edit-outofpage"]' => array('checked' => FALSE),
+      ),
+    ),
   );
-
-  $form['gpt_ads_outofpage'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Out of page slot'),
-    '#description' => t('<p>Only available to DFP Premium accounts, enable on non-premium accounts at your own risk.</p><p>If checked the creative is loaded as an interstitial.</p>'),
-    '#default_value' => !isset($settings['outofpage']) ? 0 : $settings['outofpage'],
+  for ($i = 0; $i < $form_state['num_breakpoints']; $i++) {
+    $form['size_wrapper'][] = array(
+      '#prefix' => '<div class="inline clearfix">',
+      '#suffix' => '</div>',
+      '#element_validate' => array('gpt_element_validate_handler'),
+      '#gpt_validate_handler' => 'gpt_validate_size',
+    );
+    $form['size_wrapper'][$i]['breakpoint'] = array(
+      '#type' => $form_state['num_breakpoints'] === 1 ? 'hidden' : 'textfield',
+      '#title' => t('Breakpoint'),
+      '#size' => 10,
+      '#default_value' => $defaults['size'][$i]['breakpoint'],
+      '#disabled' => $i === 0,
+    );
+    $form['size_wrapper'][$i]['size'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Size'),
+      '#size' => 25,
+      '#default_value' => $defaults['size'][$i]['size'],
+    );
+  }
+  // Build add button.
+  $form['size_wrapper']['breakpoint_add'] = array(
+    '#type' => 'submit',
+    '#value' => t('Add breakpoint'),
+    '#submit' => array('gpt_submit_handler'),
+    '#gpt_submit_handler' => 'gpt_ad_slot_form_breakpoint_add',
+    '#attributes' => array('class' => array('gpt-breakpoint-add')),
     '#ajax' => array(
-      'callback' => 'gpt_ads_form_ajax_outofpage_callback',
-      'wrapper' => 'gpt-ads-size',
+      'callback' => 'gpt_ad_slot_form_size_ajax_callback',
+      'wrapper' => 'gpt-size',
     ),
   );
 
-  $form['gpt_targeting_label'] = array(
-    '#type' => 'item',
-    '#title' => t('Slot-level customized targeting'),
-    '#description' => t('Provide key-value pairs for slot-level customized targeting. Multiple values may be associated with one key.'),
-    '#attributes' => array('class' => array('gpt-targeting-label')),
+  $form['outofpage'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Out of page slot'),
+    '#description' => t('<p>Only available to DFP Premium accounts, enable on non-premium accounts at your own risk.</p><p>If checked the creative is loaded as an interstitial and ad slot size settings are ignored.</p>'),
+    '#default_value' => $defaults['outofpage'],
   );
 
-  // Targeting fields have the same keys, we have to set #tree to access them.
-  $form['#tree'] = TRUE;
-  // Prepare targeting values needed.
-  $targeting = isset($settings['targeting']) ? $settings['targeting'] : array();
-  _gpt_targeting_prep($form_state, $targeting);
-  // Add targeting form elements.
-  _gpt_targeting_form_elements($form, $form_state, 'gpt_ads_form_ajax_targeting_callback');
+  $form['refresh'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Refreshable'),
+    '#description' => t('<p>Allow the ad to be refreshed; requires aynchronous mode be enabled.</p>'),
+    '#default_value' => $defaults['refresh'],
+  );
 
-  // Add CSS to make targeting pairs appear inline.
-  _gpt_admin_attach_css();
+  $form['targeting_wrapper'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Slot-level customized targeting'),
+    '#description' => t('Provide key-value pairs for slot-level customized targeting.'),
+    '#prefix' => '<div id="gpt-targeting">',
+    '#suffix' => '</div>',
+  );
+  // Determine if the user is allowed to alter/create Javascript targeting.
+  $js_perm = user_access('gpt set javascript');
+  for ($i = 0; $i < $form_state['num_targeting_keys']; $i++) {
+    $form['targeting_wrapper'][] = array(
+      '#prefix' => '<div class="key clearfix">',
+      '#suffix' => '</div>',
+      '#element_validate' => array('gpt_element_validate_handler'),
+      '#gpt_validate_handler' => 'gpt_validate_targeting',
+    );
+    $form['targeting_wrapper'][$i]['key'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Key'),
+      '#size' => 15,
+      '#default_value' => $defaults['targeting'][$i]['key'],
+    );
+    for ($j = 0; $j < $form_state['num_targeting_values_' . $i]; $j++) {
+      $value_wrapper =& $form['targeting_wrapper'][$i]['values'][$j];
+      $value_wrapper = array(
+        '#prefix' => '<div class="row">',
+        '#suffix' => '</div>',
+      );
+      $value_wrapper['value'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Value'),
+        '#size' => 25,
+        '#default_value' => $defaults['targeting'][$i]['values'][$j]['value'],
+        '#disabled' => !$js_perm && $defaults['targeting'][$i]['values'][$j]['eval'] ? TRUE : FALSE,
+      );
+      $value_wrapper['eval'] = array(
+        '#type' => 'checkbox',
+        '#title' => t('Value is Javascript'),
+        '#disabled' => !$js_perm,
+        '#default_value' => $defaults['targeting'][$i]['values'][$j]['eval'],
+      );
+    }
+    // Build add button.
+    $form['targeting_wrapper'][$i]['add'] = array(
+      '#type' => 'submit',
+      '#value' => t('Add value'),
+      // Without a unique #name value our form will not be able to distinguish
+      // which add value button was clicked.
+      '#name' => 'add-value-' . $i,
+      '#submit' => array('gpt_submit_handler'),
+      '#gpt_submit_handler' => 'gpt_ad_slot_form_targeting_value_add',
+      '#prefix' => '<div class="row"><div>',
+      '#suffix' => '</div></div>',
+      '#ajax' => array(
+        'callback' => 'gpt_ad_slot_form_targeting_ajax_callback',
+        'wrapper' => 'gpt-targeting',
+      ),
+    );
+  }
+  // Build add button.
+  $form['targeting_wrapper']['targeting_add'] = array(
+    '#type' => 'submit',
+    '#value' => t('Add key'),
+    '#submit' => array('gpt_submit_handler'),
+    '#gpt_submit_handler' => 'gpt_ad_slot_form_targeting_key_add',
+    '#attributes' => array('class' => array('gpt-targeting-add')),
+    '#ajax' => array(
+      'callback' => 'gpt_ad_slot_form_targeting_ajax_callback',
+      'wrapper' => 'gpt-targeting',
+    ),
+  );
+
+  return $form;
 }
 
 /**
- * Ajax callback from changing outofpage field.
+ * Submit handler for the add breakpoint button.
  */
-function gpt_ads_form_ajax_outofpage_callback($form, $form_state) {
-  return $form['gpt_ads_size'];
+function gpt_ad_slot_form_breakpoint_add($form, &$form_state) {
+  $form_state['num_breakpoints']++;
+  $form_state['rebuild'] = TRUE;
 }
 
 /**
- * Ajax callback from using targeting add more button.
+ * Ajax callback to return the size wrapper.
  */
-function gpt_ads_form_ajax_targeting_callback($form, $form_state) {
-  return $form['gpt_targeting_wrapper'];
+function gpt_ad_slot_form_size_ajax_callback($form, $form_state) {
+  return $form['size_wrapper'];
+}
+
+/**
+ * Slot form submit handler, prepare values for use in parent form.
+ */
+function gpt_ad_slot_form_submit(&$form, &$form_state) {
+  $values = array();
+  $values['outofpage'] = $form_state['values']['outofpage'];
+  $values['refresh'] = $form_state['values']['refresh'];
+
+  $values['size'] = NULL;
+  if (!$form_state['values']['outofpage']) {
+    // Look for breakpoints with data.
+    $breakpoints = array();
+    for ($i = 0; $i < $form_state['num_breakpoints']; $i++) {
+      if (strlen($form_state['values']['size_wrapper'][$i]['breakpoint'])) {
+        $breakpoints[(string) $form_state['values']['size_wrapper'][$i]['breakpoint']] = $form_state['values']['size_wrapper'][$i]['size'];
+      }
+    }
+    // Sort breakpoints ascending.
+    ksort($breakpoints);
+    foreach ($breakpoints as $breakpoint => $size) {
+      $values['size'][] = array(
+        'breakpoint' => (string) $breakpoint,
+        'size' => _gpt_ads_size_to_array($size),
+      );
+    }
+  }
+
+  $values['targeting'] = NULL;
+  for ($i = 0; $i < $form_state['num_targeting_keys']; $i++) {
+    if (strlen($form_state['values']['targeting_wrapper'][$i]['key'])) {
+      $key = array(
+        'key' => $form_state['values']['targeting_wrapper'][$i]['key'],
+      );
+      for ($j = 0; $j < $form_state['num_targeting_values_' . $i]; $j++) {
+        if (strlen($form_state['values']['targeting_wrapper'][$i]['values'][$j]['value'])) {
+          $key['values'][] = array(
+            'value' => $form_state['values']['targeting_wrapper'][$i]['values'][$j]['value'],
+            'eval' => $form_state['values']['targeting_wrapper'][$i]['values'][$j]['eval'],
+          );
+        }
+      }
+      $values['targeting'][] = $key;
+    }
+  }
+
+  $form_state['prepared_values'] = $values;
+  dpm($values, 'prepared values write');
+}
+
+/**
+ * Ajax callback to return the targeting wrapper.
+ */
+function gpt_ad_slot_form_targeting_ajax_callback($form, $form_state) {
+  return $form['targeting_wrapper'];
+}
+
+/**
+ * Submit handler for the targeting add key button.
+ */
+function gpt_ad_slot_form_targeting_key_add($form, &$form_state) {
+  // Add a value for the new key.
+  $form_state['num_targeting_values_' . $form_state['num_targeting_keys']] = 1;
+  // Add the new key.
+  $form_state['num_targeting_keys']++;
+  $form_state['rebuild'] = TRUE;
+}
+
+/**
+ * Submit handler for the targeting add value button.
+ */
+function gpt_ad_slot_form_targeting_value_add($form, &$form_state) {
+  $form_state['num_targeting_values_' . $form_state['triggering_element']['#parents'][1]]++;
+  $form_state['rebuild'] = TRUE;
+}
+
+/**
+ * Ad manager provider form.
+ * 
+ * Handles provider form through a subform.
+ */
+function gpt_ads_form(&$form, &$form_state) {
+  $slot_form_values = isset($form_state['item']->settings['gpt_ads']) ?
+      $form_state['item']->settings['gpt_ads'] : array();
+  dpm($slot_form_values, 'slot form values');
+  $form['slot_form'] = array(
+    '#type' => 'subform',
+    '#subform_id' => 'gpt_ad_slot_form',
+    '#subform_file' => array('module' => 'gpt', 'name' => 'gpt.admin.inc'),
+    '#subform_arguments' => array($slot_form_values),
+    '#required' => TRUE,
+  );
+  $form['#buttons']['return']['#submit'][] = 'subform_submit_all';
+  // No matter what I do with the subform I can't seem to get it to hit the
+  // gpt_ad_slot_form_submit() function through subform automatically.
 }
 
 /**
@@ -72,27 +274,20 @@ function gpt_ads_submit(&$form, &$form_state) {
   // change providers for a specific ad.
   $settings =& $form_state['item']->settings['gpt_ads'];
 
-  // Set settings for storage.
-  $settings['size'] = gpt_prepare_size($form_state['values']['gpt_ads_size']);
-  $settings['outofpage'] = $form_state['values']['gpt_ads_outofpage'];
+  // Process subform submit handler.
+  // We have to hack in our subform submit handler here, see note in
+  // gpt_ads_form().
+  $form_state['temporary']['subform']['subform-slot_form']['submit_handlers'] = array(
+    'gpt_ad_slot_form_submit',
+  );
+  subform_submit_all($form, $form_state);
 
-  // Store targeting, iterate over elements.
-  $settings['targeting']['src'] = array();
-  foreach ($form_state['values']['gpt_targeting_wrapper'] as $v) {
-    // Only attempt to store the key/value pair if both key and value are set.
-    if (!empty($v['key']) && !empty($v['value'])) {
-      $settings['targeting']['src'][$v['key']][] = array('value' => $v['value'], 'eval' => $v['eval']);
-    }
+  // Now we use our values to do what we need:
+  $values = $form_state['temporary']['subform']['subform-slot_form']['prepared_values'];
+  dpm($values, 'prepared values read');
+  foreach ($values as $key => $value) {
+    $settings[$key] = $value;
   }
-  $settings['targeting']['prep'] = gpt_prepare_targeting($settings['targeting']['src']);
-}
-
-/**
- * Submit handler for the add more targeting button.
- */
-function gpt_form_targeting_add($form, &$form_state) {
-  $form_state['gpt_targeting_num']++;
-  $form_state['rebuild'] = TRUE;
 }
 
 /**
@@ -183,6 +378,199 @@ function gpt_settings_submit(&$form, &$form_state) {
 }
 
 /**
+ * Element validate size and breakpoint fields.
+ *
+ * @param array $element
+ * @param array $form_state
+ * @param array $form
+ *
+ * @return void
+ */
+function gpt_validate_size($element, &$form_state, $form) {
+  _gpt_admin_attach_css();
+
+  // If out of page is set, don't bother validating.
+  if ($form_state['values']['outofpage']) {
+    return;
+  }
+
+  // $breakpoints stores the breakpoints submitted. Used to flag duplicate
+  // breakpoints.
+  $breakpoints = &drupal_static(__FUNCTION__);
+  if (!isset($breakpoints)) {
+    foreach ($form_state['values']['size_wrapper'] as $sizes) {
+      $breakpoints[] = $sizes['breakpoint'];
+    }
+  }
+
+  // Retrieve breakpoint and size, strip spaces from both.
+  $breakpoint =& $form_state['values']['size_wrapper'][$element['#parents'][1]]['breakpoint'];
+  $breakpoint = str_replace(' ', '', $breakpoint);
+  $size =& $form_state['values']['size_wrapper'][$element['#parents'][1]]['size'];
+  $size = str_replace(' ', '', $size);
+
+  // Validate breakpoint.
+  if (strlen($breakpoint)) {
+    // Invalid value supplied.
+    if ($breakpoint !== '0' && !preg_match('#^[1-9][0-9]*$#', $breakpoint)) {
+      form_error($element['breakpoint'], t('Invalid value supplied for breakpoint, must be a positive integer.'));
+    }
+    // Breakpoint supplied more than one time.
+    elseif (count(array_keys($breakpoints, $breakpoint)) > 1) {
+      form_error($element['breakpoint'], t('Duplicate assignment of breakpoint %breakpoint.', array('%breakpoint' => $breakpoint)));
+    }
+  }
+
+  // Validate size.
+  if (strlen($size)) {
+    // If breakpoint is not set for the size.
+    if (!strlen($breakpoint)) {
+      form_error($element, t('A breakpoint must be defined for size %size.', array('%size' => $size)));
+    }
+    elseif (!preg_match('#^[1-9][0-9]*x[1-9][0-9]*(?:,[1-9][0-9]*x[1-9][0-9]*)*$#', $size)) {
+      form_error($element['size'], t('Size %size does not match the expected format.', array('%size' => $size)));
+    }
+  }
+}
+
+/**
+ * Element validate callback for targeting fields.
+ *
+ * @param array $element
+ * @param array $form_state
+ * @param array $form
+ *
+ * @return void
+ */
+function gpt_validate_targeting($element, &$form_state, $form) {
+  _gpt_admin_attach_css();
+
+  // $keys stores the keys submitted. Used to flag duplicate keys.
+  $keys = &drupal_static(__FUNCTION__);
+  if (!isset($keys)) {
+    foreach ($form_state['values']['targeting_wrapper'] as $targeting) {
+      $keys[] = trim($targeting['key']);
+    }
+  }
+
+  $key = trim($element['key']['#value']);
+
+  if (strlen($key) && count(array_keys($keys, $key)) > 1) {
+    form_error($element['key'], t('Duplicate assignment of key %key.', array('%key' => $key)));
+  }
+  else {
+    $value_set = FALSE;
+    foreach ($form_state['values']['targeting_wrapper'][$element['#parents'][1]]['values'] as $values) {
+      $value =& $values['value'];
+      $value = trim($value);
+
+      if (strlen($value)) {
+        $value_set = TRUE;
+
+        if (!strlen($key)) {
+          form_error($element['key'], t('Targeting key for value %value has not been set.', array('%value' => $value)));
+        }
+      }
+    }
+    if (!$value_set && strlen($key)) {
+      form_error($element['values'][0]['value'], t('A targeting value for key %key has not been set.', array('%key' => $key)));
+    }
+  }
+}
+
+/**
+ * Prepare default values for ad slot form.
+ */
+function _gpt_ad_slot_form_defaults(&$s, &$form_state) {
+  $d = array();
+
+  // Build defaults from inserted values.
+  if (isset($form_state['values'])) {
+    $v = $form_state['values'];
+
+    // Size values
+    $d['size'] = array();
+    for ($i = 0; $i < $form_state['num_breakpoints']; $i++) {
+      $value = isset($v['size_wrapper'][$i]) ? $v['size_wrapper'][$i] : FALSE;
+      $d['size'][] = array(
+        'breakpoint' => $value !== FALSE ? $value['breakpoint'] : '',
+        'size' => $value !== FALSE ? $value['size'] : '',
+      );
+    }
+
+    // Targeting values
+    $d['targeting'] = array();
+    for ($i = 0; $i < $form_state['num_targeting_keys']; $i++) {
+      $value = isset($v['targeting_wrapper'][$i]) ? $v['targeting_wrapper'][$i] : FALSE;
+      $d['targeting'][$i] = array(
+        'key' => $value !== FALSE ? $value['key'] : '',
+        'values' => array(),
+      );
+      for ($j = 0; $j < $form_state['num_targeting_values_' . $i]; $j++) {
+        $value = isset($v['targeting_wrapper'][$i]['values'][$j]) ? $v['targeting_wrapper'][$i]['values'][$j] : FALSE;
+        $d['targeting'][$i]['values'][$j] = array(
+          'value' => $value !== FALSE ? $value['value'] : '',
+          'eval' => $value !== FALSE ? $value['eval'] : 0,
+        );
+      }
+    }
+
+    // Out of page
+    $d['outofpage'] = $v['outofpage'];
+
+    // Refresh
+    $d['refresh'] = $v['refresh'];
+  }
+  // Else, if available, build defaults from stored settings.
+  elseif (!empty($s)) {
+    $d = $s;
+
+    // Update sizes to friendly from array.
+    for ($i = 0; $i < count($d['size']); $i++) {
+      if (!empty($d['size'][$i]['size'])) {
+        $d['size'][$i]['size'] = _gpt_ads_size_to_friendly($d['size'][$i]['size']);
+      }
+    }
+    $form_state['num_breakpoints'] = ($i === 0 ? 1 : $i);
+
+    // Determine targeting key and value indexes.
+    for ($i = 0; $i < count($s['targeting']); $i++) {
+      $form_state['num_targeting_values_' . $i] = count($s['targeting'][$i]['values']);
+    }
+    $form_state['num_targeting_keys'] = $i;
+  }
+  // Else set defaults from scratch.
+  else {
+    $d['size'] = array(
+      array(
+        'breakpoint' => '0',
+        'size' => '',
+      ),
+    );
+    $d['targeting'] = array(
+      array(
+        'key' => '',
+        'values' => array(
+          array(
+            'value' => '',
+            'eval' => 0,
+          ),
+        ),
+      ),
+    );
+    $d['outofpage'] = 0;
+    $d['refresh'] = 1;
+
+    // Set our index trackers for the number of units.
+    $form_state['num_breakpoints'] = 1;
+    $form_state['num_targeting_keys'] = 1;
+    $form_state['num_targeting_values_0'] = 1;
+  }
+
+  return $d;
+}
+
+/**
  * Helper to attach admin CSS once per page load.
  */
 function _gpt_admin_attach_css() {
@@ -194,224 +582,48 @@ function _gpt_admin_attach_css() {
 }
 
 /**
- * Determine if outofpage is set.
+ * Convert human friendly width by height string to size array for GPT.
  *
- * @param array $form_state
- * @param array $settings
+ * @param string|NULL $string
  *
- * @return boolean
+ * @return array|void
  */
-function _gpt_ads_is_outofpage($form_state, $settings = array()) {
-  if (isset($form_state['values'])) {
-    return $form_state['values']['gpt_ads_outofpage'];
-  }
-  elseif (isset($settings['outofpage'])) {
-    return $settings['outofpage'];
+function _gpt_ads_size_to_array($string = NULL) {
+  $string = str_replace(' ', '', $string);
+  if (empty($string)) {
+    return;
   }
 
-  return FALSE;
+  $sizes = explode(',', $string);
+  foreach ($sizes as &$size) {
+    $size = explode('x', $size);
+  }
+
+  return $sizes;
 }
 
 /**
- * Convert JSON size array to more human friendly width by height format.
+ * Convert size array to more human friendly width by height format.
  *
- * @param string|NULL $json
- *   JSON array in the format of [width,height] or
- *   [[width,height],[width,height]...]
+ * @param array|NULL $sizes
  *
  * @return string|void
  */
-function _gpt_ads_size_to_friendly($json = NULL) {
-  if (!$json) {
+function _gpt_ads_size_to_friendly($sizes = NULL) {
+  if (empty($sizes)) {
     return;
   }
 
-  // Match the values from the JSON.
-  if (preg_match_all('#[1-9][0-9]*,[1-9][0-9]*#', $json, $matches)) {
-    // Substitute comma in between width and height for x.
-    foreach ($matches[0] as &$v) {
-      $v = str_replace(',', 'x', $v);
-    }
-    $matches = array_shift($matches);
-    // Implode multiple matches with comma separation.
-    return implode(',', $matches);
-  }
-  else {
-    return;
-  }
-}
-
-/**
- * Element validate callback for GPT provider size field.
- *
- * @param array $element
- * @param array $form_state
- * @param array $form
- *
- * @return void
- */
-function _gpt_ads_validate_size($element, &$form_state, $form) {
-  // If out of page is set, clear size and don't validate.
-  if (_gpt_ads_is_outofpage($form_state)) {
-    $form_state['values']['gpt_ads_size'] = '';
-    return;
-  }
-  
-  // Validate string.
-  $element['#value'] = str_replace(' ', '', $element['#value']);
-  if (!preg_match('#^[1-9][0-9]*x[1-9][0-9]*(?:,[1-9][0-9]*x[1-9][0-9]*)*$#', $element['#value'])) {
-    _gpt_admin_attach_css();
-    form_error($element, t('Ad slot creative size does not match the expected format.'));
-  }
-}
-
-/**
- * Elements
- *
- * @param array $form
- * @param array $form_state
- * @param string $ajax_callback
- *   The function to callback upon AJAX add more button.
- *
- * @return void
- */
-function _gpt_targeting_form_elements(&$form, &$form_state, $ajax_callback) {
-  $form['gpt_targeting_wrapper'] = array(
-    '#prefix' => '<div id="gpt-targeting">',
-    '#suffix' => '</div>',
-    '#tree' => TRUE,
-  );
-
-  // Determine if the user is allowed to alter/create Javascript targeting.
-  $js_perm = user_access('gpt set javascript');
-  // Build the fields with the proper number of targeting fields.
-  for ($i = 0; $i < $form_state['gpt_targeting_num']; $i++) {
-    $default = isset($form_state['gpt_targeting_defaults'][$i]) ? $form_state['gpt_targeting_defaults'][$i] : FALSE;
-    $form['gpt_targeting_wrapper'][$i] = array(
-      '#prefix' => '<div class="inline clearfix">',
-      '#suffix' => '</div>',
-      '#element_validate' => array('gpt_validate_targeting'),
-    );
-    $form['gpt_targeting_wrapper'][$i]['key'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Key'),
-      '#size' => 15,
-      '#default_value' => $default ? $default['key'] : '',
-    );
-    $form['gpt_targeting_wrapper'][$i]['value'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Value'),
-      '#size' => 25,
-      '#default_value' => $default ? $default['value'] : '',
-    );
-    // Prevent users without the appropriate permission from setting Javascript.
-    if ($default['eval'] && !$js_perm) {
-      $form['gpt_targeting_wrapper'][$i]['key']['#disabled'] = TRUE;
-      $form['gpt_targeting_wrapper'][$i]['value']['#disabled'] = TRUE;
-    }
-    $form['gpt_targeting_wrapper'][$i]['eval'] = array(
-      '#type' => 'checkbox',
-      '#title' => t('Value is Javascript'),
-      '#default_value' => $default ? $default['eval'] : '',
-      '#disabled' => !$js_perm,
-    );
-  }
-
-  $form['gpt_targeting_eval_desc'] = array(
-    '#type' => 'item',
-    '#description' => t('If the <em>value is Javascript</em> setting is used for a value, and the value is not valid Javascript, errors will be caused on the site which will upredictably break site functionality.'),
-    // #type item doesn't support attributes so we have to use prefix/suffix.
-    '#prefix' => '<div class="gpt-targeting-eval-desc">',
-    '#suffix' => '</div>',
-  );
-
-  // Build add button.
-  $form['gpt_targeting_add'] = array(
-    '#type' => 'submit',
-    '#value' => t('Add more'),
-    '#submit' => array('gpt_form_targeting_add'),
-    '#attributes' => array('class' => array('gpt-targeting-add')),
-    '#ajax' => array(
-      'callback' => $ajax_callback,
-      'wrapper' => 'gpt-targeting',
-    ),
-  );
-}
-
-/**
- * Prepare targeting values for use in form builder.
- *
- * @param array $form_state
- * @param array $targeting
- *   Pre-stored targeting settings.
- *
- * @return void
- */
-function _gpt_targeting_prep(&$form_state, $targeting = array()) {
-  // If targeting num is already set prep has already been completed.
-  if (!empty($form_state['gpt_targeting_num'])) {
-    return;
-  }
-
-  // Attempt to load stored settings.
-  if (!empty($targeting)) {
-    // If loading stored settings reset targeting num and defaults.
-   $form_state['gpt_targeting_num'] = $i = 0;
-
-    // Iterate over stored values.
-    foreach ($targeting['src'] as $key => $j) {
-      foreach ($j as $v) {
-        $form_state['gpt_targeting_defaults'][$i] = array(
-          'key' => $key,
-          'value' => $v['value'],
-          'eval' => $v['eval'],
-        );
-        $i++;
+  // If size values are set.
+  if (isset($sizes[0])) {
+    if (is_array($sizes[0])) {
+      $return = array();
+      foreach ($sizes as $size) {
+        $return[] = $size[0] . 'x' . $size[1];
       }
+      return implode(',', $return);
     }
 
-    // Set targeting num so that form builder will show correct fields.
-    $form_state['gpt_targeting_num'] = $i;
-  }
-
-  // Initialize form state's gpt_targeting_num if not set.
-  if (empty($form_state['gpt_targeting_num'])) {
-    $form_state['gpt_targeting_num'] = 1;
-  }
-}
-
-/**
- * Element validate callback for GPT targeting fields.
- *
- * Converts targeting fields to the expected JSON GPT format.
- *
- * @param array $element
- * @param array $form_state
- * @param array $form
- *
- * @return void
- */
-function _gpt_validate_targeting($element, &$form_state, $form) {
-  if (!isset($form_state['targeting'])) {
-    $form_state['targeting'] = array();
-  }
-
-  $key = $element['key']['#value'];
-  $value = $element['value']['#value'];
-  $eval = $element['eval']['#value'];
-
-  // If key or value has been set, but not both, then set an error on the empty one.
-  if (!(!empty($key) && !empty($value)) && !(empty($key) && empty($value))) {
-    // Attach admin CSS if there is an error.
-    _gpt_admin_attach_css();
-
-    // Prepare form_set_error name for use in errors below.
-    $name = implode('][', $element['#parents']) . '][';
-    if (empty($key)) {
-      form_set_error($name . 'key', t('Targeting key for value %value has been left empty.', array('%value' => $value)));
-    }
-    else {
-      form_set_error($name . 'value', t('Targeting value for key %key has been left empty.', array('%key' => $key)));
-    }
+    return $sizes[0] . 'x' . $sizes[1];
   }
 }
