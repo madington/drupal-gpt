@@ -41,6 +41,10 @@ function gpt_entity_schema() {
 }
 
 /**
+ * TODO: Need hook_update_N to migrate from src/prep storage to new.
+ */
+
+/**
  * Implements hook_uninstall().
  */
 function gpt_entity_uninstall() {
