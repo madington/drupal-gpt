@@ -819,6 +819,9 @@ function _gpt_ads_size_to_array($string = NULL) {
   $sizes = explode(',', $string);
   foreach ($sizes as &$size) {
     $size = explode('x', $size);
+    foreach ($size as &$s) {
+      $s = (int) $s;
+    }
   }
 
   return $sizes;
