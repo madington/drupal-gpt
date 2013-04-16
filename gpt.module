@@ -61,7 +61,7 @@ function gpt_alter_page_options(&$original, $integrate) {
         $original['targeting'][] = $v;
       }
     }
-    // Unset $integrate targeting, so it override below.
+    // Unset $integrate targeting, so it doesn't override below.
     unset($integrate['targeting']);
   }
 
@@ -106,21 +106,39 @@ function gpt_form_ad_manager_settings_form_alter(&$form, &$form_state) {
  *   - sra: Use single request architecture, boolean.
  *   - collapse: Collapse divs without creatives, boolean.
  *   - targeting: Page level targeting, multi-dimensional array.
+ *
+ * @todo Finalize caching standard and flushing standard.
  */
 function gpt_load_page_options() {
   $options = &drupal_static(__FUNCTION__);
 
-  if (empty($options)) {
-    $options = array(
-      'network_code' => variable_get('gpt__network_code', ''),
-      'targeted_ad_unit' => variable_get('gpt__targeted_ad_unit', ''),
-      'async' => variable_get('gpt__async', 1),
-      'sra' => variable_get('gpt__sra', 0),
-      'collapse' => variable_get('gpt__collapse', 0),
-      'refresh' => variable_get('gpt__refresh', 0),
-      'targeting' => variable_get('gpt__targeting', array()),
-    );
-    drupal_alter('gpt_load_page_options', $options);
+  if (!isset($options)) {
+    $cid = 'gpt:page:' . current_path();
+    // Attempt to fetch from cache.
+    //$cache = cache_get($cid);
+    $cache = FALSE;
+    if ($cache) {
+      $options = $cache->data;
+    }
+    // Else build options
+    else {
+      $options = array(
+        'network_code' => variable_get('gpt__network_code', ''),
+        'targeted_ad_unit' => variable_get('gpt__targeted_ad_unit', ''),
+        'async' => variable_get('gpt__async', 1),
+        'sra' => variable_get('gpt__sra', 0),
+        'collapse' => variable_get('gpt__collapse', 0),
+        'refresh' => variable_get('gpt__refresh', 0),
+        'targeting' => variable_get('gpt__targeting', array()),
+      );
+      drupal_alter('gpt_load_page_options', $options);
+
+      // Store page options in cache to prevent needless rebuilding.
+      // TODO: We should probably have config options available for the storage
+      // time, or make permanent and anything that modifies the $options will need
+      // to manually flush the affected cache IDs...
+      // cache_set($cid, $options, 'cache', CACHE_TEMPORARY);
+    }
   }
 
   return $options;
