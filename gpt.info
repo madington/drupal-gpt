@@ -2,4 +2,5 @@ name = Google Publisher Tag
 description = Display ads using the Google Publisher Tag.
 core = 7.x
 dependencies[] = ad_manager
+dependencies[] = subform
 package = Advertising
