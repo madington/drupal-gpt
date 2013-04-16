@@ -38,27 +38,23 @@ function gpt_ads(&$form, &$form_state) {
  */
 function gpt_alter_page_options(&$original, $integrate) {
   if (isset($integrate['targeting'])) {
-    $key_index = array();
-    foreach ($original['targeting'] as $k => $v) {
-      $key_index[$v['key']] = $k;
-    }
+    $targeting = get_object_vars($integrate['targeting']);
+    foreach ($targeting as $key => &$values) {
+      // Pull method out of values.
+      $method = $values['method'];
+      unset($values['method']);
 
-    foreach ($integrate['targeting'] as $v) {
-      if (isset($key_index[$v['key']])) {
-        // Override
-        if ($v['method'] == '1') {
-          $original['targeting'][$key_index[$v['key']]] = $v;
-        }
-        // Append
-        else {
-          foreach ($v['values'] as $w) {
-            $original['targeting'][$key_index[$v['key']]]['values'][] = $w;
-          }
-        }
+      // Override or assign.
+      if ((isset($original['targeting']->$key) && $method == '1')
+          || !isset($original['targeting']->$key)) {
+        $original['targeting']->$key = $values;
       }
-      // Append
+      // Else append.
       else {
-        $original['targeting'][] = $v;
+        foreach ($values as $value) {
+          $target =& $original['targeting']->$key;
+          $target[] = $value;
+        }
       }
     }
     // Unset $integrate targeting, so it doesn't override below.
@@ -135,8 +131,8 @@ function gpt_load_page_options() {
 
       // Store page options in cache to prevent needless rebuilding.
       // TODO: We should probably have config options available for the storage
-      // time, or make permanent and anything that modifies the $options will need
-      // to manually flush the affected cache IDs...
+      // time, or make permanent and anything that modifies the $options will
+      // need to manually flush the affected cache IDs...
       // cache_set($cid, $options, 'cache', CACHE_TEMPORARY);
     }
   }
@@ -147,9 +143,8 @@ function gpt_load_page_options() {
 /**
  * Implements hook_page_build().
  */
-function gpt_page_build() {
+function gpt_page_build(&$page) {
   $options = gpt_load_page_options();
-return;
 
   // Ensure required options are set.
   if (empty($options['network_code']) || empty($options['targeted_ad_unit'])) {
@@ -160,31 +155,52 @@ return;
     return;
   }
 
-  // TODO: Is drupal_add_js the best method?
-
+  $js =& $page['page_top']['gpt_js'];
+  $attached =& $page['page_top']['gpt']['#attached'];
   // Attach our GPT class and behavior.
-  drupal_add_js(drupal_get_path('module', 'gpt') . '/js/gpt.js');
+  $attached['js'][] = array(
+    'data' => drupal_get_path('module', 'gpt') . '/js/gpt.js',
+    'every_page' => TRUE,
+  );
 
   // Add page level options.
-  drupal_add_js(array('gpt' => $options), 'setting');
+  $attached['js'][] = array(
+    'data' => array('gpt' => $options),
+    'type' => 'setting',
+  );
 
   // Initialize our GPT code.
-  drupal_add_js('Drupal.GPT = new Drupal.GPTClass(Drupal.settings.gpt);', 'inline');
+  $js[] = array(
+    '#value' => 'Drupal.GPT = new Drupal.GPTClass(Drupal.settings.gpt);',
+  );
   if ($options['async']) {
     if ($options['sra']) {
       // The only way for SRA to work is to have it run after the inline JS of
       // the body, we force this with jQuery's .ready().
-      drupal_add_js('$(document).ready(Drupal.GPT.run);', 'inline');
+      $init_code = '$(document).ready(Drupal.GPT.run);';
     }
     else {
-      drupal_add_js('googletag.cmd.push(Drupal.GPT.run);', 'inline');
+      $init_code = 'googletag.cmd.push(Drupal.GPT.run);';
     }
   }
   else {
     // Browser run promise is per script tag, this makes it two tags, we run
     // immediately as GPT must be ready when inline tags are hit, no support
     // for SRA.
-    drupal_add_js('Drupal.GPT.run();', 'inline');
+    $init_code = 'Drupal.GPT.run();';
+  }
+  $js[] = array(
+    '#value' => $init_code,
+  );
+
+  foreach ($js as &$js_element) {
+    $js_element['#tag'] = 'script';
+    $js_element['#attributes'] = array(
+      'type' => 'text/javascript',
+    );
+    $js_element['#value_prefix'] = "\n<!--//--><![CDATA[//><!--\n";
+    $js_element['#value_suffix'] = "\n//--><!]]>\n";
+    $js_element['#theme'] = 'html_tag';
   }
 }
 

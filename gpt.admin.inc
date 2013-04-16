@@ -178,6 +178,7 @@ function gpt_ad_slot_form_submit(&$form, &$form_state) {
 
   $values['size'] = NULL;
   if (!$form_state['values']['outofpage']) {
+    $values['size'] = new stdClass();
     // Look for breakpoints with data.
     $breakpoints = array();
     for ($i = 0; $i < $form_state['num_breakpoints']; $i++) {
@@ -187,29 +188,25 @@ function gpt_ad_slot_form_submit(&$form, &$form_state) {
     }
     // Sort breakpoints ascending.
     ksort($breakpoints);
+    // Assign size settings per breakpoint, rather than auto-increment key.
     foreach ($breakpoints as $breakpoint => $size) {
-      $values['size'][] = array(
-        'breakpoint' => (string) $breakpoint,
-        'size' => _gpt_ads_size_to_array($size),
-      );
+      $values['size']->$breakpoint = _gpt_ads_size_to_array($size);
     }
   }
 
-  $values['targeting'] = NULL;
+  $values['targeting'] = new stdClass();
   for ($i = 0; $i < $form_state['num_targeting_keys']; $i++) {
     if (strlen($form_state['values']['targeting_wrapper'][$i]['key'])) {
-      $key = array(
-        'key' => $form_state['values']['targeting_wrapper'][$i]['key'],
-      );
+      $targeting = array();
       for ($j = 0; $j < $form_state['num_targeting_values_' . $i]; $j++) {
         if (strlen($form_state['values']['targeting_wrapper'][$i]['values'][$j]['value'])) {
-          $key['values'][] = array(
+          $targeting[] = array(
             'value' => $form_state['values']['targeting_wrapper'][$i]['values'][$j]['value'],
             'eval' => $form_state['values']['targeting_wrapper'][$i]['values'][$j]['eval'],
           );
         }
       }
-      $values['targeting'][] = $key;
+      $values['targeting']->$form_state['values']['targeting_wrapper'][$i]['key'] = $targeting;
     }
   }
 
@@ -547,24 +544,22 @@ function gpt_settings_form_submit(&$form, &$form_state) {
   }
 
   // Targeting
-  $values['targeting'] = NULL;
+  $values['targeting'] = new stdClass();
   for ($i = 0; $i < $form_state['num_targeting_keys']; $i++) {
     if (strlen($form_state['values']['targeting_wrapper'][$i]['key'])) {
-      $key = array(
-        'key' => $form_state['values']['targeting_wrapper'][$i]['key'],
-      );
+      $targeting = array();
       if (!$form_state['global_settings']) {
-        $key['method'] = $form_state['values']['targeting_wrapper'][$i]['method'];
+        $targeting['method'] = $form_state['values']['targeting_wrapper'][$i]['method'];
       }
       for ($j = 0; $j < $form_state['num_targeting_values_' . $i]; $j++) {
         if (strlen($form_state['values']['targeting_wrapper'][$i]['values'][$j]['value'])) {
-          $key['values'][] = array(
+          $targeting[] = array(
             'value' => $form_state['values']['targeting_wrapper'][$i]['values'][$j]['value'],
             'eval' => $form_state['values']['targeting_wrapper'][$i]['values'][$j]['eval'],
           );
         }
       }
-      $values['targeting'][] = $key;
+      $values['targeting']->$form_state['values']['targeting_wrapper'][$i]['key'] = $targeting;
     }
   }
 
@@ -747,19 +742,39 @@ function _gpt_ad_slot_form_defaults(&$s, &$form_state) {
   elseif (!empty($s)) {
     $d = $s;
 
+    // Convert sizes from object to indexed array.
+    $sizes = array();
+    foreach (get_object_vars($d['size']) as $breakpoint => $size) {
+      $sizes[] = array(
+        'breakpoint' => $breakpoint,
+        'size' => _gpt_ads_size_to_friendly($size),
+      );
+    }
+    $d['size'] = $sizes;
     // Update sizes to friendly from array.
-    for ($i = 0; $i < count($d['size']); $i++) {
-      if (!empty($d['size'][$i]['size'])) {
-        $d['size'][$i]['size'] = _gpt_ads_size_to_friendly($d['size'][$i]['size']);
-      }
-    }
-    $form_state['num_breakpoints'] = ($i === 0 ? 1 : $i);
+    $form_state['num_breakpoints'] = count($sizes) ? count($sizes) : 1;
 
-    // Determine targeting key and value indexes.
-    for ($i = 0; $i < count($s['targeting']); $i++) {
-      $form_state['num_targeting_values_' . $i] = count($s['targeting'][$i]['values']);
+    // Convert targeting from object to indexed array.
+    $targeting = array();
+    $count = 0;
+    $form_state['num_targeting_values_0'] = 1;
+    foreach (get_object_vars($d['targeting']) as $key => $values) {
+      $targeting[] = array(
+        'key' => $key,
+        'values' => $values,
+      );
+      $form_state['num_targeting_values_' . $count] = count($values) ? count($values) : 1;
+      $count++;
     }
-    $form_state['num_targeting_keys'] = $i;
+    $d['targeting'] = $targeting;
+    // Initialize from scratch
+    if (!$count) {
+      $form_state['num_targeting_keys'] = 1;
+      $form_state['num_targeting_values_0'] = 1;
+    }
+    else {
+      $form_state['num_targeting_keys'] = $count;
+    }
   }
   // Else set defaults from scratch.
   else {
@@ -864,10 +879,17 @@ function _gpt_settings_form_defaults(&$s, &$form_state, $global) {
     'async' => variable_get('gpt__async', 1),
     'sra' => variable_get('gpt__sra', 0),
     'collapse' => variable_get('gpt__collapse', 0),
+    // We don't variable_get targeting as it is not displayed on non-global
+    // forms like the other data is.
+    'targeting' => array(),
   );
 
+  // Get keys array for use assigning basic variables.
+  $keys = array_keys($d);
+  // We don't want to include targeting in the basic assignments.
+  unset($keys[5]);
+
   if (!$global) {
-    $keys = array_keys($d);
     foreach ($keys as $key) {
       $d[$key . '_override'] = 0;
     }
@@ -875,7 +897,6 @@ function _gpt_settings_form_defaults(&$s, &$form_state, $global) {
 
   // Build defaults from inserted values.
   if (isset($form_state['values'])) {
-    $keys = array_keys($d);
     foreach ($keys as $key) {
       $d[$key] = $form_state['values'][$key];
     }
@@ -901,7 +922,7 @@ function _gpt_settings_form_defaults(&$s, &$form_state, $global) {
   }
   // Else, if available, build defaults from stored settings.
   elseif (!empty($s)) {
-    foreach (array_keys($d) as $key) {
+    foreach ($keys as $key) {
       if (isset($s[$key])) {
         $d[$key] = $s[$key];
         $d[$key . '_override'] = 1;
@@ -909,39 +930,36 @@ function _gpt_settings_form_defaults(&$s, &$form_state, $global) {
     }
 
     if (isset($s['targeting'])) {
-      $d['targeting'] = $s['targeting'];
-    }
-    else {
-      $d['targeting'] = array(
-        array(
-          'key' => '',
-          'method' => 0,
-          'values' => array(
-            array(
-              'value' => '',
-              'eval' => 0,
-            ),
-          ),
-        ),
-      );
+      $d['targeting'] = array();
+      // Convert targeting from object to indexed array.
+      $targeting = array();
+      foreach (get_object_vars($s['targeting']) as $key => $values) {
+        $target = array();
+        if (isset($values['method'])) {
+          $target['method'] = $values['method'];
+          unset($values['method']);
+        }
+        $target['key'] = $key;
+        $target['values'] = $values;
+        $targeting[] = $target;
+      }
+      $d['targeting'] = $targeting;
     }
   }
   // Elseif this is for a global config, load targeting from variable_get().
   elseif ($global) {
-    $d['targeting'] = variable_get('gpt__targeting', array(
-      array(
-        'key' => '',
-        'values' => array(
-          array(
-            'value' => '',
-            'eval' => 0,
-          ),
-        ),
-      ),
-    ));
+    $targeting = array();
+    foreach (get_object_vars(variable_get('gpt__targeting', array())) as $key => $values) {
+      $targeting[] = array(
+        'key' => $key,
+        'values' => $values,
+      );
+    }
+    $d['targeting'] = $targeting;
   }
-  // Else build basic targeting structure.
-  else {
+
+  // Provide default targeting.
+  if (empty($d['targeting'])) {
     $d['targeting'] = array(
       array(
         'key' => '',
@@ -954,6 +972,9 @@ function _gpt_settings_form_defaults(&$s, &$form_state, $global) {
         ),
       ),
     );
+    if (!$global) {
+      $d['targeting'][0]['method'] = 0;
+    }
   }
 
   // Determine targeting key and value indexes if not yet set.

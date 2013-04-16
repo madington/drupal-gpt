@@ -33,7 +33,7 @@ function gpt_entity_crud_load($type, $id) {
   ))->fetchField();
 
   if ($data) {
-    return drupal_json_decode($data);
+    return unserialize($data);
   }
 
   return FALSE;
@@ -50,7 +50,7 @@ function gpt_entity_crud_load($type, $id) {
  *   The GPT array to store.
  */
 function gpt_entity_crud_save($type, $id, $data) {
-  $data = drupal_json_encode($data);
+  $data = serialize($data);
 
   // Insert/Update the record.
   db_merge('gpt_entity')
