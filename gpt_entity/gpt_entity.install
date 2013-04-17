@@ -41,8 +41,66 @@ function gpt_entity_schema() {
 }
 
 /**
- * TODO: Need hook_update_N to migrate from src/prep storage to new.
+ * Implements hook_update_N().
+ *
+ * Updates data structure to get rid of targeting src and prep keys, and to
+ * convert ad sizes to objects.
  */
+function gpt_entity_update_7000(&$sandbox) {
+  if (!isset($sandbox['progress'])) {
+    $sandbox['progress'] = 0;
+    // Count the number of records
+    $sandbox['max'] = db_query('SELECT COUNT(entity_id) FROM {gpt_entity}')->fetchField();
+  }
+
+  // Update ad units in DB.
+  $rows = db_query_range('SELECT entity_type, entity_id, data FROM {gpt_entity} ORDER BY entity_type, entity_id ASC',
+      $sandbox['progress'], 3);
+  foreach ($rows as $row) {
+    $data = drupal_json_decode($row->data);
+
+    // Update targeting.
+    $targeting =& $data['targeting'];
+    $new_targeting = new stdClass();
+    if (isset($targeting['src']) && is_array($targeting['src'])) {
+      foreach ($targeting['src'] as $k => $v) {
+        $new_targeting->$k = $v;
+      }
+    }
+    $data['targeting'] = $new_targeting;
+
+    // Update sizes.
+    if (!$data['outofpage']) {
+      $size = json_decode($data['size']);
+      $new_size = new stdClass();
+      if (is_array($size[0])) {
+        $new_size->{0} = $size;
+      }
+      else {
+        $new_size->{0} = array($size);
+      }
+      $data['size'] = $new_size;
+    }
+    else {
+      $data['size'] = NULL;
+    }
+
+    // Default refresh to true.
+    $data['refresh'] = 1;
+
+    db_update('gpt_entity')
+      ->fields(array(
+        'data' => serialize($data),
+      ))
+      ->condition('entity_type', $row->entity_type, '=')
+      ->condition('entity_id', $row->entity_id, '=')
+      ->execute();
+
+    $sandbox['progress']++;
+  }
+
+  $sandbox['#finished'] = empty($sandbox['max']) ? 1 : ($sandbox['progress'] / $sandbox['max']);
+}
 
 /**
  * Implements hook_uninstall().
