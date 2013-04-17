@@ -177,7 +177,7 @@ function gpt_page_build(&$page) {
     if ($options['sra']) {
       // The only way for SRA to work is to have it run after the inline JS of
       // the body, we force this with jQuery's .ready().
-      $init_code = '$(document).ready(Drupal.GPT.run);';
+      $init_code = 'jQuery(document).ready(Drupal.GPT.run);';
     }
     else {
       $init_code = 'googletag.cmd.push(Drupal.GPT.run);';
