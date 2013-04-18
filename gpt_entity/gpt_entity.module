@@ -143,12 +143,15 @@ function gpt_entity_gpt_load_page_options_alter(&$options) {
       continue;
     }
 
-    $data = gpt_entity_crud_load($entity->entity_type, $entity->$entity_info['entity keys']['id']);
-    if ($data) {
-      gpt_alter_page_options($options, $data);
-      // Break out of the foreach just to prevent any unique edge cases in
-      // which there could be two entities in a menu item.
-      break;
+    // Must wrap in isset as the value is sometimes not available... Panelizer.
+    if (isset($entity->$entity_info['entity keys']['id'])) {
+      $data = gpt_entity_crud_load($entity->entity_type, $entity->$entity_info['entity keys']['id']);
+      if ($data) {
+        gpt_alter_page_options($options, $data);
+        // Break out of the foreach just to prevent any unique edge cases in
+        // which there could be two entities in a menu item.
+        break;
+      }
     }
   }
 }
