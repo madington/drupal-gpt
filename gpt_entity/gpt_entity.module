@@ -125,7 +125,7 @@ function gpt_entity_form_submit(&$form, &$form_state) {
 function gpt_entity_gpt_load_page_options_alter(&$options) {
   $item = menu_get_item();
   // Only proceed if there could be a page entity to act upon.
-  if (!isset($item['page_arguments'])) {
+  if (!isset($item['page_arguments']) || !is_array($item['page_arguments'])) {
     return;
   }
 
