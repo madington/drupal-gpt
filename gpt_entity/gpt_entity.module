@@ -92,8 +92,10 @@ function gpt_entity_field_attach_form($entity_type, $entity, &$form, &$form_stat
   $entity_info = entity_get_info($entity_type);
   // Confirm the entity is used as a router item (ie a page) and that the user
   // has access before adding the targeting form.
+  // TODO: We need a better way to ommit file entity types rather than
+  // explicitly excluding it as it sets a poor precendent.
   if (isset($entity_info['bundle keys']['bundle']) &&
-      user_access('gpt entity targeting')) {
+      user_access('gpt entity targeting') && $entity_type !== 'file') {
     // Load form from include file, keeps .module light weight.
     ctools_include('gpt_entity', 'gpt_entity', FALSE);
     gpt_entity_form($entity_type, $entity, $form, $form_state, $langcode);
