@@ -95,6 +95,7 @@ function gpt_entity_field_attach_form($entity_type, $entity, &$form, &$form_stat
   // TODO: We need a better way to ommit file entity types rather than
   // explicitly excluding it as it sets a poor precendent.
   if (isset($entity_info['bundle keys']['bundle']) &&
+      isset($entity_info['path']) &&
       user_access('gpt entity targeting') && $entity_type !== 'file') {
     // Load form from include file, keeps .module light weight.
     ctools_include('gpt_entity', 'gpt_entity', FALSE);
