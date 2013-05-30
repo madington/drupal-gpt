@@ -129,6 +129,10 @@ function gpt_load_page_options() {
       );
       drupal_alter('gpt_load_page_options', $options);
 
+      // Sanitize targeted_ad_unit and targeting.
+      $options['targeted_ad_unit'] = gpt_sanitize_targeted_ad_unit($options['targeted_ad_unit']);
+      gpt_sanitize_targeting($options['targeting']);
+
       // Store page options in cache to prevent needless rebuilding.
       // TODO: We should probably have config options available for the storage
       // time, or make permanent and anything that modifies the $options will
@@ -214,6 +218,88 @@ function gpt_permission() {
       'description' => t('Allow users to create and edit Javascript targeting values. Potential to break Javascript on the site.'),
     ),
   );
+}
+
+/**
+ * Helper function, prepare targeted ad unit string.
+ *
+ * @param string $str
+ *   String to be modified to only allow permissible characters.
+ *
+ * @return string
+ *   The sanitized string that GPT will accept.
+ */
+function gpt_sanitize_targeted_ad_unit($str) {
+  if (variable_get('gpt__lowercase_values', 1)) {
+    $str = strtolower($str);
+    $safe = '#[^a-z0-9 \-_]#';
+  }
+  else {
+    $safe = '#[^A-Za-z0-9 \-_]#';
+  }
+  // Targeted ad unit can not accept any special characters, even if encoded,
+  // so we strip out all potential offenders.
+  $str = preg_replace($safe, '', trim($str));
+  // Replace spaces with a dash, turns multiple dashes into a single dash.
+  return preg_replace('#-{2,}#', '-', str_replace(' ', '-', $str));
+}
+
+/**
+ * Helper function, sanitize targeting class.
+ *
+ * @param object $targeting
+ *   See $options['targeting'] definition in gpt.api.php.
+ *
+ * @return void
+ */
+function gpt_sanitize_targeting(&$targeting) {
+  // Yes targeting is a stdClass object, but we can foreach it for public
+  // properties.
+  foreach ($targeting as &$values) {
+    foreach ($values as &$value) {
+      if (!$value['eval']) {
+        $value = gpt_sanitize_value($value);
+      }
+    }
+  }
+}
+
+/**
+ * Helper function, prepare a value from a key/value pair for use.
+ *
+ * @param string|array $value
+ *   String or array of strings to be encoded to handle non-safe characters.
+ * @param boolean $unique
+ *   If $value is an array and $unique is TRUE then non-unique values are
+ *   reduced to a single unique item. This should really only be FALSE if your
+ *   code will be running unique on the array after this call.
+ *
+ * @return string|array
+ *   String or array of strings that has been encoded to be GPT acceptable.
+ */
+function gpt_sanitize_value($value, $unique = TRUE) {
+  $lowercase = variable_get('gpt__lowercase_values', 1);
+
+  // Remove punctuation and symbols that is not a dash nor connector, from
+  // UTF-8 scope. u modifier used as fallback if not compiled with unicode
+  // properties.
+  // This allows us to support accented characters while removing harmful
+  // symbols and erroneous punctuation.
+  // URL encoding is not required as it is untargetable in GPT even though the
+  // GPT documentation says encoding is needed. Since we're stripping unsafe
+  // characters we are fine.
+  $value = preg_replace('#[\p{S}\p{Ps}\p{Pe}\p{Pi}\p{Pf}\p{Po}]#u', '', $value);
+
+  if (is_array($value)) {
+    foreach ($value as &$v) {
+      $v = preg_replace('#\s{2,}#', ' ', trim($lowercase ? strtolower($v) : $v));
+    }
+    // Limit to unique, if appropriate, and strip empty items.
+    return array_filter($unique ? array_unique($value) : $value);
+  }
+
+  // Reduce multiple spaces to a single space.
+  return preg_replace('#\s{2,}#', ' ', trim($lowercase ? strtolower($value) : $value));
 }
 
 /**
