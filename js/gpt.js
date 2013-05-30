@@ -13,7 +13,7 @@
     self.outOfPage = ad.outOfPage || ad.outofpage || false;
     self.refresh = ad.refresh || false;
     self.resizeListener = null;
-    self.size = ad.size;
+    self.size = self.outOfPage ? [[0,0]] : ad.size;
     self.slot = {};
     self.slotDomEl = {};
     self.targetedAdUnit = ad.targetedAdUnit || ad.targeted_ad_unit;
