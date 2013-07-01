@@ -429,15 +429,17 @@
       var t = [];
       // Eval values if they need to be.
       for (var j = 0; j < targeting[i].length; j++) {
-        if (targeting[i][j].eval) {
-          // Wrap eval in a try incase of error.
-          try {
-            t.push(eval(targeting[i][j].value));
+        if (typeof targeting[i][j] === 'object' ) {
+          if (targeting[i][j].eval) {
+            // Wrap eval in a try in case of error.
+            try {
+              t.push(eval(targeting[i][j].value));
+            }
+            catch (e) {}
           }
-          catch (e) {}
-        }
-        else {
-          t.push(targeting[i][j].value);
+          else {
+            t.push(targeting[i][j].value);
+          }
         }
       }
 
