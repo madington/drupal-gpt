@@ -229,6 +229,9 @@
         // Default targeted ad unit for ad slots on the page.
       , targetedAdUnit: options.targetedAdUnit || options.targeted_ad_unit
     };
+    if (this.isIE8OrWorse()) {
+      self.pageOptions.sra = 1;
+    }
     self.ads = {};
     self.initialized = false;
 
@@ -261,6 +264,19 @@
       })();
     }
   };
+
+  /**
+   * Return true if browser is IE and version 8 or older.
+   */
+  GPT.prototype.isIE8OrWorse = function () {
+    var rv = -1;
+    var re = new RegExp("MSIE ([0-9]{1,}[\.0-9]{0,})");
+    if (re.exec(navigator.userAgent) != null) {
+      rv = parseFloat(RegExp.$1);
+    }
+
+    return (rv > 0 && rv <=8);
+  }
 
   /**
    * Define a GPT slot object.

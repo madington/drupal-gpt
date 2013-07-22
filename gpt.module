@@ -178,14 +178,9 @@ function gpt_page_build(&$page) {
     '#value' => 'Drupal.GPT = new Drupal.GPTClass(Drupal.settings.gpt);',
   );
   if ($options['async']) {
-    if ($options['sra']) {
-      // The only way for SRA to work is to have it run after the inline JS of
-      // the body, we force this with jQuery's .ready().
-      $init_code = 'jQuery(document).ready(Drupal.GPT.run);';
-    }
-    else {
-      $init_code = 'googletag.cmd.push(Drupal.GPT.run);';
-    }
+    // The only way for SRA to work is to have it run after the inline JS of
+    // the body, we force this with jQuery's .ready().
+    $init_code = 'Drupal.GPT.pageOptions.sra ? jQuery(document).ready(Drupal.GPT.run) : googletag.cmd.push(Drupal.GPT.run);';
   }
   else {
     // Browser run promise is per script tag, this makes it two tags, we run
