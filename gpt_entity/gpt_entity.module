@@ -73,7 +73,7 @@ function gpt_entity_entity_delete($entity, $type) {
 }
 
 /**
- * Implements hook_entity_load(). 
+ * Implements hook_entity_load().
  */
 function gpt_entity_entity_load($entities, $type) {
   foreach ($entities as $entity) {

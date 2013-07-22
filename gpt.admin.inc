@@ -241,7 +241,7 @@ function gpt_ad_slot_form_targeting_value_add($form, &$form_state) {
 
 /**
  * Ad manager provider form.
- * 
+ *
  * Handles provider form through a subform.
  */
 function gpt_ads_form(&$form, &$form_state) {
@@ -260,7 +260,7 @@ function gpt_ads_form(&$form, &$form_state) {
 }
 
 /**
- * Ad Manager ad provider form submit for AdSense Custom Search Ads.
+ * Ad Manager ad provider form submit for GPT Ads.
  */
 function gpt_ads_submit(&$form, &$form_state) {
   // A key of the provider name is used to prevent conflicting data if users
