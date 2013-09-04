@@ -476,17 +476,18 @@
 /**
  * Refresh GPT ads.
  */
-Drupal.behaviors.gpt = function (context) {
-  Drupal.settings.gpt = Drupal.settings.gpt || {};
-
-  if (Drupal.settings.gpt.notFirstRun) {
-    // It's possible Drupal.GPT is not defined if critical values were missing.
-    if (typeof Drupal.GPT !== 'undefined') {
-      Drupal.GPT.refresh();
+Drupal.behaviors.gpt = {
+  attach: function (context, settings) {
+    settings.gpt = settings.gpt || {};
+    if (settings.gpt.notFirstRun) {
+      // It's possible Drupal.GPT is not defined if critical values were missing.
+      if (typeof Drupal.GPT !== 'undefined') {
+        Drupal.GPT.refresh();
+      }
+    }
+    else {
+      settings.gpt.notFirstRun = true;
     }
   }
-  else {
-    Drupal.settings.gpt.notFirstRun = true;
-  }
-}
+};
 
