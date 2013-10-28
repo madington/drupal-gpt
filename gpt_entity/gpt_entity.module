@@ -89,18 +89,26 @@ function gpt_entity_entity_load($entities, $type) {
  * Implements hook_field_attach_form().
  */
 function gpt_entity_field_attach_form($entity_type, $entity, &$form, &$form_state, $langcode) {
-  $entity_info = entity_get_info($entity_type);
-  // Confirm the entity is used as a router item (ie a page) and that the user
-  // has access before adding the targeting form.
-  // TODO: We need a better way to ommit file entity types rather than
-  // explicitly excluding it as it sets a poor precendent.
-  if (isset($entity_info['bundle keys']['bundle']) &&
-      isset($entity_info['path']) &&
-      user_access('gpt entity targeting') && $entity_type !== 'file') {
-    // Load form from include file, keeps .module light weight.
-    ctools_include('gpt_entity', 'gpt_entity', FALSE);
-    gpt_entity_form($entity_type, $entity, $form, $form_state, $langcode);
+  // Bail out if we already have an entity form or our entity has no form.
+  if (!empty($form['gpt_entity'])
+      || !gpt_entity_has_targeting($entity_type, $entity)) {
+    return;
   }
+
+  // Load form from include file, keeps .module light weight.
+  ctools_include('gpt_entity', 'gpt_entity', FALSE);
+  gpt_entity_form($entity_type, $entity, $form, $form_state, $langcode);
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Alter settings form to provide needed configuration.
+ */
+function gpt_entity_form_ad_manager_settings_form_alter(&$form, &$form_state) {
+  // Load in logic that is needed for the settings form.
+  ctools_include('gpt_entity.admin', 'gpt_entity', FALSE);
+  gpt_entity_global_settings_form($form, $form_state);
 }
 
 /**
@@ -120,6 +128,41 @@ function gpt_entity_form_alter(&$form) {
 function gpt_entity_form_submit(&$form, &$form_state) {
   ctools_include('gpt_entity', 'gpt_entity', FALSE);
   gpt_entity_form_submit_handler($form, $form_state);
+}
+
+/**
+ * Returns an array of settings to determine what entity bundles should have
+ * targeting enabled.
+ *
+ * @param string $entity_type
+ *   The entity type to return settings for. If omitted, all entity types'
+ *   settings will be returned.
+ *
+ * @return array
+ *   If a type is requested, the value will be an array with the bundle names as
+ *   keys and a value that can be interpreted as boolean for whether or not that
+ *   bundle should be targeted. If no type is supplied, an array structured as
+ *   $array[$entity_type]['settings'][$bundle] will be returned. For both
+ *   returns, a special bundle of __all__ is also provided to mean "all" bundles
+ *   of that entity type.
+ */
+function gpt_entity_get_attach_form_settings($entity_type = NULL) {
+  $settings = variable_get(
+    'gpt_entity__attach_form_settings',
+    array(
+      'node' => array('settings' => array('__all__' => '__all__')),
+      'taxonomy_term' => array('settings' => array('__all__' => '__all__')),
+    )
+  );
+
+  if (!isset($entity_type)) {
+    return $settings;
+  }
+
+  if (isset($settings[$entity_type]['settings'])) {
+    return $settings[$entity_type]['settings'];
+  }
+  return array();
 }
 
 /**
@@ -157,6 +200,44 @@ function gpt_entity_gpt_load_page_options_alter(&$options) {
       }
     }
   }
+}
+
+/**
+ * Determines if the provided entity should allow for customized targeting.
+ *
+ * @param string $entity_type
+ *   The type of the entity that is provided.
+ * @param stdClass $entity
+ *   The entity object that is being evaluated.
+ *
+ * @return bool
+ *   Returns TRUE if the entity should be targeted, FALSE otherwise.
+ */
+function gpt_entity_has_targeting($entity_type, $entity) {
+  // Load the defined settings for our entity type.
+  $settings = gpt_entity_get_attach_form_settings($entity_type);
+
+  // Check if all bundles of our entity type are targeted. This lets us delay
+  // the call to entity_get_info() if we do not need it.
+  if (!isset($settings['__all__']) || !$settings['__all__']) {
+    // Load the entity info so we can get our bundle.
+    $entity_info = entity_get_info($entity_type);
+
+    // Unfortunately, some entities do not have a bundle key so we must do a
+    // check for one. We name it $bundle only so the following check will
+    // have a value to use as an array key if there is no bundle key.
+    $bundle = $entity_info['entity keys']['bundle'];
+    if ($bundle) {
+      $bundle = $entity->$entity_info['entity keys']['bundle'];
+    }
+
+    // Ensure that our bundle is allowed, or we exit now.
+    if (!isset($settings[$bundle]) || !$settings[$bundle]) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
 }
 
 /**
