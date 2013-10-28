@@ -83,6 +83,14 @@ function gpt_entity_form_submit_handler(&$form, &$form_state) {
   // Retrieve the identifier for the entity.
   list($id) = entity_extract_ids($form['#entity_type'], $form_state[$form['#entity_type']]);
 
+  // This variable necessary to support PHP version < 5.4 as we cannot perform
+  // array dereference from entity_uri() before that version.
+  $path = entity_uri($form['#entity_type'], $form_state[$form['#entity_type']]);
+  $path = isset($path['path']) ? $path['path'] : NULL;
+
+  // Flush any cached page options since they will need to be rebuilt.
+  gpt_page_options_cache_clear($path);
+
   // If no data, then attempt a delete.
   if (empty($data)) {
     gpt_entity_crud_delete($form['#entity_type'], $id);

@@ -309,6 +309,9 @@ function gpt_global_settings_form(&$form, &$form_state) {
  * Global settings for submit handler.
  */
 function gpt_global_settings_form_submit(&$form, &$form_state) {
+  // Flush any cached page options since they will need to be rebuilt.
+  gpt_page_options_cache_clear();
+
   $values = $form_state['temporary']['subform']['subform-gpt-gpt_settings']['prepared_values'];
   $keys = array('network_code', 'targeted_ad_unit', 'async', 'sra', 'collapse', 'targeting');
 

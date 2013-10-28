@@ -109,10 +109,10 @@ function gpt_load_page_options() {
   $options = &drupal_static(__FUNCTION__);
 
   if (!isset($options)) {
-    $cid = 'gpt:page:' . current_path();
+    // Build the cid, we md5 the path to ensure it fits the max index length.
+    $cid = 'gpt:page_options:' . md5(current_path());
     // Attempt to fetch from cache.
-    //$cache = cache_get($cid);
-    $cache = FALSE;
+    $cache = cache_get($cid);
     if ($cache) {
       $options = $cache->data;
     }
@@ -134,10 +134,7 @@ function gpt_load_page_options() {
       gpt_sanitize_targeting($options['targeting']);
 
       // Store page options in cache to prevent needless rebuilding.
-      // TODO: We should probably have config options available for the storage
-      // time, or make permanent and anything that modifies the $options will
-      // need to manually flush the affected cache IDs...
-      // cache_set($cid, $options, 'cache', CACHE_TEMPORARY);
+       cache_set($cid, $options);
     }
   }
 
@@ -201,6 +198,19 @@ function gpt_page_build(&$page) {
     $js_element['#value_suffix'] = "\n//--><!]]>\n";
     $js_element['#theme'] = 'html_tag';
   }
+}
+
+/**
+ * Flushes page options cache data for the specified path or all paths.
+ *
+ * @param string $path
+ */
+function gpt_page_options_cache_clear($path = NULL) {
+  cache_clear_all(
+    'gpt:page_options:' . (isset($path) ? md5($path) : ''),
+    'cache',
+    !isset($path)
+  );
 }
 
 /**
