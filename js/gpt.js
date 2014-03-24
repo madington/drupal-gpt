@@ -18,6 +18,7 @@
     self.slotDomEl = {};
     self.targetedAdUnit = ad.targetedAdUnit || ad.targeted_ad_unit;
     self.targeting = ad.targeting || null;
+    self.populated = {};
 
     // Add responsive listener if the ad has breakpoints and is responsive.
     if (responsive) {
@@ -56,6 +57,23 @@
   };
 
   /**
+   * Make the slot and relevant parents display/hide.
+   */
+  GPTAd.prototype.display = function () {
+    var slotEl = this.slotDomEl[this.breakpoint];
+    // If populated.
+    if (this.populated[slotEl.id]) {
+      slotEl.style.display = '';
+      this.domEl.style.display = '';
+    }
+    // Else not populated.
+    else {
+      slotEl.style.display = 'none';
+      this.domEl.style.display = 'none';
+    }
+  };
+
+  /**
    * Helper to retrieve current breakpoint or sanitize passed breakpoint.
    */
   GPTAd.prototype.getBreakpoint = function (breakpoint) {
@@ -91,6 +109,12 @@
       // Create the ad if there is a size for it.
       if (self.size[breakpoint] !== null || self.outOfPage) {
         Drupal.GPT.fetchSlot(self.getSlotDomId(breakpoint), self.defineSlot, self);
+      }
+      // If there is not a size for it, hide it and the parent and set its
+      // populated value.
+      else {
+        self.populated[domId] = false;
+        self.display();
       }
     }
 
@@ -165,8 +189,11 @@
           this.slotDomEl[j].style.display = 'none';
         }
       }
-      // Display the current ad.
-      current.style.display = '';
+      // Display or hide current slot el if it was previously defined for the
+      // breakpoint, see GPT.prototype.defineSlot.
+      if (typeof this.populated[current.id] !== 'undefined') {
+        this.display();
+      }
     }
   };
 
@@ -305,6 +332,19 @@
       if ('targeting' in o) {
         self.setTargeting(slot, o.targeting);
       }
+      // Override GPT slot method for acting upon unit after rendering.
+      slot.oldRenderEnded = slot.renderEnded;
+      slot.renderEnded = function () {
+        // Run GPT's standard renderEnded method.
+        this.oldRenderEnded();
+        // Handle responding to the ad being populated.
+        o.el = document.getElementById(o.domId);
+        var adObj = self.ads[o.el.parentNode.id];
+        // Define a property populated for this domId in GPTAd to use in
+        // responsive displaying of ad units based on breakpoint.
+        adObj.populated[o.domId] = o.el.style.display !== 'none';
+        adObj.display();
+      };
     }
 
     return slot;
