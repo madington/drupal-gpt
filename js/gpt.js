@@ -60,17 +60,26 @@
    * Make the slot and relevant parents display/hide.
    */
   GPTAd.prototype.display = function () {
-    var slotEl = this.slotDomEl[this.breakpoint];
+    var slotEl = this.slotDomEl[this.breakpoint]
+      , populated
+      , event;
     // If populated.
     if (this.populated[slotEl.id]) {
       slotEl.style.display = '';
       this.domEl.style.display = '';
+      populated = true;
     }
     // Else not populated.
     else {
       slotEl.style.display = 'none';
       this.domEl.style.display = 'none';
+      populated = false;
     }
+    event = new CustomEvent('gptAdDisplay', { 'detail': {
+      'populated': populated,
+      'el': this.domEl
+    }});
+    document.dispatchEvent(event);
   };
 
   /**
