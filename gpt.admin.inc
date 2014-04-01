@@ -952,7 +952,7 @@ function _gpt_settings_form_defaults(&$s, &$form_state, $global) {
   // Elseif this is for a global config, load targeting from variable_get().
   elseif ($global) {
     $targeting = array();
-    foreach (get_object_vars(variable_get('gpt__targeting', array())) as $key => $values) {
+    foreach (get_object_vars(variable_get('gpt__targeting', new stdClass())) as $key => $values) {
       $targeting[] = array(
         'key' => $key,
         'values' => $values,
