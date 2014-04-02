@@ -1,6 +1,84 @@
 <?php
 
 /**
+ * Implements hook_ad_manager_field_additional_description().
+ *
+ * Note, this hook is kind of a psuedo hook. It is the provider, gpt_ads,
+ * rather than the module name gpt, as one module can supply multiple
+ * providers potentially.
+ */
+function gpt_ads_ad_manager_field_additional_description($name, $unit) {
+  static $descriptions = array();
+
+  // If this unit has not had its description generated.
+  if (!isset($descriptions[$name])) {
+    if (isset($unit->settings['gpt_ads']['outofpage']) &&
+        $unit->settings['gpt_ads']['outofpage'] === 1) {
+      $descriptions[$name] = t('The ad unit selected is an out of page unit and has no dimensional definitions.');
+    }
+    elseif (!isset($unit->settings['gpt_ads']['size'])) {
+      $descriptions[$name] = FALSE;
+    }
+    else {
+      $size_settings = $unit->settings['gpt_ads']['size'];
+      $friendly_size = array();
+      module_load_include('inc', 'gpt', 'gpt.admin');
+      foreach ((array) $size_settings as $breakpoint => $sizes) {
+        $friendly_size[] = array(
+          'breakpoint' => $breakpoint,
+          'size' => _gpt_ads_size_to_friendly($sizes)
+        );
+      }
+
+      if (empty($friendly_size)) {
+        $descriptions[$name] = FALSE;
+      }
+      elseif (count($friendly_size) === 1) {
+        $descriptions[$name] = t('The ad unit selected will render in the following dimensions: @size',
+            array('@size' => $friendly_size[0]['size']));
+      }
+      else {
+        $presentation_sizes = array();
+        // Iterate over each breakpoint.
+        for ($i = 0; $i < count($friendly_size); $i++) {
+          // Determine whether to report a size or a no size message.
+          if (empty($friendly_size[$i]['size'])) {
+            $use_size = t('No ad displayed');
+          }
+          else {
+            $use_size = $friendly_size[$i]['size'];
+          }
+          // If there is not another breakpoint after this one.
+          if (!isset($friendly_size[$i + 1])) {
+            $presentation_sizes[] = t('@start up: @size', array(
+              '@start' => $friendly_size[$i]['breakpoint'],
+              '@size' => $use_size,
+            ));
+          }
+          // Else there is another breakpoint, record the size for the range.
+          else {
+            $presentation_sizes[] = t('@start to @end: @size', array(
+              '@start' => $friendly_size[$i]['breakpoint'],
+              '@end' => $friendly_size[$i + 1]['breakpoint'] -1,
+              '@size' => $use_size,
+            ));
+
+          }
+        }
+        $presentation_list = '<ul><li>' . implode('</li><li>', $presentation_sizes) . '</li></ul>';
+        $descriptions[$name] = t('The ad unit selected has the following presentations based on browser width: !size',
+            array('!size' => $presentation_list));
+      }
+    }
+  }
+
+  // If there is a description to report.
+  if ($descriptions[$name] !== FALSE) {
+    return $descriptions[$name];
+  }
+}
+
+/**
  * Implements hook_ad_manager_providers().
  */
 function gpt_ad_manager_providers() {
