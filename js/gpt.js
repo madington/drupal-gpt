@@ -23,7 +23,7 @@
     // Add responsive listener if the ad has breakpoints and is responsive.
     if (responsive) {
       var count = 0;
-      for (var i in self.size) {
+      for (var i in self.size) { 
         if (++count > 1) {
           // Create named anonymous function to preserve scope in listener.
           var resizeListener = function () { self.responsiveHandler() };
@@ -55,12 +55,40 @@
       , unitName: this.getUnitName()
     });
   };
-
+  
+  /**
+   * Create a polyfill for the custom events to work with IE
+   */
+  if (document.addEventListener) {
+    // Create a custom event function for IE to use (IE9+)
+    function CustomEvent ( event, params ) {
+      params = params || { bubbles: false, cancelable: false, detail: undefined };
+      var evt = document.createEvent( 'CustomEvent' );
+      evt.initCustomEvent( event, params.bubbles, params.cancelable, params.detail );
+      return evt;
+    };
+    // Create the prototype.
+    CustomEvent.prototype = window.Event.prototype;
+    // Ad the custom even to the window.
+    window.CustomEvent = CustomEvent;
+  } else {
+    // Create an event listener for IE8.
+    Event.trigger = function (eventName) {
+      if(document.createEvent) {
+        var event = document.createEvent('Event');
+        event.initEvent(eventName, true, true);
+        document.dispatchEvent(event);
+      } else {
+        eval('document.documentElement.' + eventName + '++');
+      }
+    } 
+  } 
+  
   /**
    * Make the slot and relevant parents display/hide.
    */
   GPTAd.prototype.display = function () {
-    var slotEl = this.slotDomEl[this.breakpoint]
+    var details, slotEl = this.slotDomEl[this.breakpoint]
       , populated
       , event;
     // If populated.
@@ -75,11 +103,18 @@
       this.domEl.style.display = 'none';
       populated = false;
     }
-    event = new CustomEvent('gptAdDisplay', { 'detail': {
+    // Create the details for inclusion.
+    details = { 'detail': {
       'populated': populated,
       'el': this.domEl
-    }});
-    document.dispatchEvent(event);
+    }};
+    if (document.addEventListener) {
+      event = new CustomEvent('gptAdDisplay', details);
+      document.dispatchEvent(event);
+    } else {
+      window.gptAdUnit = details;
+      Event.trigger('gptAdDisplay'); 
+    }
   };
 
   /**
