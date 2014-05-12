@@ -240,6 +240,7 @@ function gpt_page_build(&$page) {
   $attached['js'][] = array(
     'data' => drupal_get_path('module', 'gpt') . '/js/gpt.js',
     'every_page' => TRUE,
+    'force header' => TRUE,
   );
 
   // Add page level options.
