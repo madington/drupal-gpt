@@ -316,10 +316,10 @@ function gpt_permission() {
 function gpt_sanitize_targeted_ad_unit($str) {
   if (variable_get('gpt__lowercase_values', 1)) {
     $str = strtolower($str);
-    $safe = '#[^a-z0-9 \-_]#';
+    $safe = '#[^a-z0-9 \-_\.]#';
   }
   else {
-    $safe = '#[^A-Za-z0-9 \-_]#';
+    $safe = '#[^A-Za-z0-9 \-_\.]#';
   }
   // Targeted ad unit can not accept any special characters, even if encoded,
   // so we strip out all potential offenders.
